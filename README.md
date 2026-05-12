@@ -138,7 +138,6 @@ app/                  FastAPI service code
 rapidapi/
   openapi.json        OpenAPI 3.0 spec
   terms.md            Terms of use
-landing.html          Public landing page (served at oti-labs.com/domain-intelligence-api)
 domain-intel.service  systemd unit
 requirements.txt      Python deps
 ```
