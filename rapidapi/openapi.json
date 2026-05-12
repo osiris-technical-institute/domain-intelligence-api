@@ -2,279 +2,147 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Domain Intelligence API",
-    "description": "Comprehensive domain intelligence in a single API call. Aggregate DNS records, SSL certificate details, WHOIS/RDAP registration data, subdomain enumeration (via Certificate Transparency logs), email security posture (SPF/DKIM/DMARC/BIMI), and ASN/geo info \u2014 all in one request or individually. Zero setup, no scraping headaches, JSON out of the box. Ideal for cybersecurity tools, lead enrichment, compliance checks, and SaaS apps.",
-    "version": "1.0.0",
+    "description": "Aggregate domain reconnaissance in a single API call — DNS, WHOIS/RDAP, SSL/TLS, subdomain enumeration via Certificate Transparency logs, and email security posture (SPF + DMARC). Sub-second on cache hits, no LLMs in the request path. Built for security teams, threat-intel enrichment, and domain monitoring SaaS.",
+    "version": "0.2.0",
     "x-rapidapi-category": "Data",
     "contact": {
       "name": "Domain Intel API Support"
     }
   },
+  "servers": [
+    {
+      "url": "https://oti-labs.com",
+      "description": "Production"
+    }
+  ],
+  "tags": [
+    { "name": "Aggregate", "description": "All-in-one domain intelligence" },
+    { "name": "DNS", "description": "DNS record lookups" },
+    { "name": "SSL", "description": "TLS/SSL certificate inspection" },
+    { "name": "WHOIS", "description": "Domain registration data (RDAP + port-43 fallback)" },
+    { "name": "Subdomains", "description": "Subdomain discovery via Certificate Transparency logs with DNS bruteforce fallback" },
+    { "name": "Email Security", "description": "SPF and DMARC posture" },
+    { "name": "Demo", "description": "Public rate-limited demo endpoint" },
+    { "name": "Utility", "description": "Service utilities" }
+  ],
   "paths": {
     "/health": {
       "get": {
         "summary": "Health Check",
+        "description": "Returns service status. No authentication required.",
         "operationId": "health_health_get",
+        "tags": ["Utility"],
         "responses": {
           "200": {
             "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
+            "content": { "application/json": { "schema": {} } }
           }
-        },
-        "description": "Returns service status. No authentication required.",
-        "tags": [
-          "Utility"
-        ]
+        }
       }
     },
-    "/lookup": {
+    "/lookup/{domain}": {
       "get": {
         "summary": "Full Domain Intelligence Lookup",
-        "operationId": "lookup_lookup_get",
+        "description": "Aggregate endpoint: returns DNS, SSL, WHOIS, subdomains, and email security in one parallel call. Most popular endpoint.",
+        "operationId": "lookup_lookup__domain__get",
+        "tags": ["Aggregate"],
         "parameters": [
-          {
-            "name": "domain",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "default": "",
-              "title": "Domain"
-            }
-          }
+          { "name": "domain", "in": "path", "required": true, "schema": { "type": "string", "title": "Domain" } }
         ],
         "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "description": "Aggregate endpoint: returns DNS, SSL, WHOIS, subdomains, email security, and ASN in one call. Most popular endpoint.",
-        "tags": [
-          "Aggregate"
-        ]
+          "200": { "description": "Successful Response", "content": { "application/json": { "schema": {} } } },
+          "422": { "description": "Validation Error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HTTPValidationError" } } } }
+        }
       }
     },
     "/domain/{domain}/dns": {
       "get": {
         "summary": "DNS Records",
+        "description": "Returns A, AAAA, MX, TXT, NS, CNAME, and SOA records for the given domain.",
         "operationId": "dns_only_domain__domain__dns_get",
+        "tags": ["DNS"],
         "parameters": [
-          {
-            "name": "domain",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Domain"
-            }
-          }
+          { "name": "domain", "in": "path", "required": true, "schema": { "type": "string", "title": "Domain" } }
         ],
         "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "description": "Fetches all DNS record types (A, AAAA, MX, TXT, NS, CNAME, SOA) for the given domain.",
-        "tags": [
-          "DNS"
-        ]
+          "200": { "description": "Successful Response", "content": { "application/json": { "schema": {} } } },
+          "422": { "description": "Validation Error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HTTPValidationError" } } } }
+        }
       }
     },
     "/domain/{domain}/ssl": {
       "get": {
         "summary": "SSL/TLS Certificate Details",
+        "description": "Performs a live TLS handshake against the host and returns issuer, subject, validity window, SAN list, and key strength. No third-party scanner.",
         "operationId": "ssl_only_domain__domain__ssl_get",
+        "tags": ["SSL"],
         "parameters": [
-          {
-            "name": "domain",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Domain"
-            }
-          }
+          { "name": "domain", "in": "path", "required": true, "schema": { "type": "string", "title": "Domain" } }
         ],
         "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "description": "Returns issuer, subject, validity dates, SANs, and cipher suite for the domain TLS certificate.",
-        "tags": [
-          "SSL"
-        ]
+          "200": { "description": "Successful Response", "content": { "application/json": { "schema": {} } } },
+          "422": { "description": "Validation Error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HTTPValidationError" } } } }
+        }
       }
     },
     "/domain/{domain}/whois": {
       "get": {
         "summary": "WHOIS / RDAP Registration Data",
+        "description": "Registration data via the RDAP protocol (rdap.org, then IANA bootstrap), with a port-43 WHOIS fallback if RDAP is unavailable. Response includes a _source field indicating which method returned the data.",
         "operationId": "whois_only_domain__domain__whois_get",
+        "tags": ["WHOIS"],
         "parameters": [
-          {
-            "name": "domain",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Domain"
-            }
-          }
+          { "name": "domain", "in": "path", "required": true, "schema": { "type": "string", "title": "Domain" } }
         ],
         "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "description": "Returns registrar, creation/expiry dates, registrant info, and nameservers via RDAP protocol.",
-        "tags": [
-          "WHOIS"
-        ]
+          "200": { "description": "Successful Response", "content": { "application/json": { "schema": {} } } },
+          "422": { "description": "Validation Error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HTTPValidationError" } } } }
+        }
       }
     },
     "/domain/{domain}/subdomains": {
       "get": {
         "summary": "Subdomain Enumeration",
+        "description": "Enumerates subdomains by querying Certificate Transparency log sources (crt.sh, certspotter, hackertarget) concurrently, with a DNS bruteforce wordlist fallback if all CT sources fail. Whatever succeeded is returned, with a warnings[] field naming what didn't.",
         "operationId": "subs_only_domain__domain__subdomains_get",
+        "tags": ["Subdomains"],
         "parameters": [
-          {
-            "name": "domain",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Domain"
-            }
-          }
+          { "name": "domain", "in": "path", "required": true, "schema": { "type": "string", "title": "Domain" } }
         ],
         "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "description": "Enumerates known subdomains using Certificate Transparency (crt.sh) logs. No brute force, instant results.",
-        "tags": [
-          "Subdomains"
-        ]
+          "200": { "description": "Successful Response", "content": { "application/json": { "schema": {} } } },
+          "422": { "description": "Validation Error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HTTPValidationError" } } } }
+        }
       }
     },
     "/domain/{domain}/email-security": {
       "get": {
         "summary": "Email Security Posture",
+        "description": "Returns SPF and DMARC posture (presence + records). DKIM requires a selector and is not auto-discoverable, so the endpoint returns a note rather than auto-probing.",
         "operationId": "email_only_domain__domain__email_security_get",
+        "tags": ["Email Security"],
         "parameters": [
-          {
-            "name": "domain",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Domain"
-            }
-          }
+          { "name": "domain", "in": "path", "required": true, "schema": { "type": "string", "title": "Domain" } }
         ],
         "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "description": "Checks SPF, DKIM (common selectors), DMARC, BIMI, and MTA-STS records. Useful for phishing risk assessment and compliance.",
-        "tags": [
-          "Email Security"
-        ]
+          "200": { "description": "Successful Response", "content": { "application/json": { "schema": {} } } },
+          "422": { "description": "Validation Error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HTTPValidationError" } } } }
+        }
+      }
+    },
+    "/demo/{domain}": {
+      "get": {
+        "summary": "Public Demo Lookup",
+        "description": "Public demo of the aggregate endpoint. Rate-limited to 5 requests per IP per day. No authentication required.",
+        "operationId": "demo_lookup_demo__domain__get",
+        "tags": ["Demo"],
+        "parameters": [
+          { "name": "domain", "in": "path", "required": true, "schema": { "type": "string", "title": "Domain" } }
+        ],
+        "responses": {
+          "200": { "description": "Successful Response", "content": { "application/json": { "schema": {} } } },
+          "422": { "description": "Validation Error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HTTPValidationError" } } } }
+        }
       }
     }
   },
@@ -282,86 +150,21 @@
     "schemas": {
       "HTTPValidationError": {
         "properties": {
-          "detail": {
-            "items": {
-              "$ref": "#/components/schemas/ValidationError"
-            },
-            "type": "array",
-            "title": "Detail"
-          }
+          "detail": { "items": { "$ref": "#/components/schemas/ValidationError" }, "type": "array", "title": "Detail" }
         },
         "type": "object",
         "title": "HTTPValidationError"
       },
       "ValidationError": {
         "properties": {
-          "loc": {
-            "items": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "integer"
-                }
-              ]
-            },
-            "type": "array",
-            "title": "Location"
-          },
-          "msg": {
-            "type": "string",
-            "title": "Message"
-          },
-          "type": {
-            "type": "string",
-            "title": "Error Type"
-          }
+          "loc": { "items": { "anyOf": [ { "type": "string" }, { "type": "integer" } ] }, "type": "array", "title": "Location" },
+          "msg": { "type": "string", "title": "Message" },
+          "type": { "type": "string", "title": "Error Type" }
         },
         "type": "object",
-        "required": [
-          "loc",
-          "msg",
-          "type"
-        ],
+        "required": ["loc", "msg", "type"],
         "title": "ValidationError"
       }
     }
-  },
-  "servers": [
-    {
-      "url": "https://87-99-152-31.sslip.io",
-      "description": "Production"
-    }
-  ],
-  "tags": [
-    {
-      "name": "Aggregate",
-      "description": "All-in-one domain intelligence"
-    },
-    {
-      "name": "DNS",
-      "description": "DNS record lookups"
-    },
-    {
-      "name": "SSL",
-      "description": "TLS/SSL certificate inspection"
-    },
-    {
-      "name": "WHOIS",
-      "description": "Domain registration data"
-    },
-    {
-      "name": "Subdomains",
-      "description": "Subdomain discovery via CT logs"
-    },
-    {
-      "name": "Email Security",
-      "description": "SPF/DKIM/DMARC/BIMI checks"
-    },
-    {
-      "name": "Utility",
-      "description": "Service utilities"
-    }
-  ]
+  }
 }
