@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,shrink-to-fit=no">
+<meta name="theme-color" content="#15181d">
+<title>Domain Intelligence API &mdash; WHOIS, DNS, SSL &amp; Email Security in One Call | Osiris</title>
+<meta name="description" content="Production-ready domain intelligence API. WHOIS, DNS, SSL certificates, subdomains, and email security in a single REST call. Free tier. By Osiris Technical Institute.">
+<meta name="author" content="Osiris Technical Institute">
+<meta property="og:title" content="Domain Intelligence API by Osiris Technical Institute">
+<meta property="og:description" content="WHOIS, DNS, SSL, subdomains and email security in one fast REST call. Free tier. Cached.">
+<meta property="og:type" content="website">
+<link rel="icon" type="image/png" href="/otilabs_logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#15181d;--bg-2:#1b2027;--bg-3:#232a34;
+  --surface:rgba(255,255,255,0.03);--surface-2:rgba(255,255,255,0.05);
+  --border:rgba(148,163,184,0.12);--border-2:rgba(148,163,184,0.2);
+  --txt:#e2e8f0;--txt-2:#94a3b8;--txt-3:#64748b;--txt-h:#f8fafc;
+  --accent:#34d399;--accent-2:#10b981;--accent-soft:rgba(52,211,153,0.12);
+  --danger:#f87171;--warn:#fbbf24;--info:#60a5fa;
+  --radius:14px;--radius-lg:20px;--radius-sm:8px;
+  --shadow-lg:0 24px 60px rgba(0,0,0,0.55);
+  --ease:cubic-bezier(0.16,1,0.3,1);
+  --ease-out:cubic-bezier(0.22,1,0.36,1);
+}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{background:var(--bg);color:var(--txt);font-family:"Inter",system-ui,-apple-system,sans-serif;line-height:1.6;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;overflow-x:hidden;background-image:radial-gradient(ellipse 85% 55% at 50% -20%,rgba(52,211,153,0.12),transparent 70%),radial-gradient(ellipse 60% 50% at 85% 35%,rgba(96,165,250,0.045),transparent 60%);background-attachment:fixed}
+a{color:var(--accent);text-decoration:none;transition:color 0.2s var(--ease)}
+a:hover{color:var(--accent-2)}
+code,pre,kbd{font-family:"JetBrains Mono",ui-monospace,monospace}
+h1,h2,h3,h4{font-family:"Space Grotesk","Inter",sans-serif;color:var(--txt-h);letter-spacing:-0.02em;line-height:1.15;font-weight:700}
+.container{max-width:1180px;margin:0 auto;padding:0 28px}
+::selection{background:var(--accent-soft);color:var(--txt-h)}
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.6}}
+nav{position:sticky;top:0;z-index:100;padding:12px 0;isolation:isolate}
+nav::before{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(21,24,29,0.78) 0%,rgba(21,24,29,0.56) 100%);backdrop-filter:saturate(180%) blur(24px);-webkit-backdrop-filter:saturate(180%) blur(24px);z-index:-2;border-bottom:1px solid rgba(148,163,184,0.06);box-shadow:0 4px 32px rgba(0,0,0,0.3),inset 0 1px 0 rgba(255,255,255,0.04)}
+nav::after{content:"";position:absolute;left:0;right:0;bottom:0;height:1px;background:linear-gradient(90deg,transparent 0%,rgba(52,211,153,0.35) 22%,rgba(96,165,250,0.28) 50%,rgba(52,211,153,0.35) 78%,transparent 100%);opacity:0.75;pointer-events:none;z-index:-1}
+.nav-inner{display:flex;align-items:center;justify-content:space-between;gap:24px;position:relative}
+.logo{display:flex;align-items:center;gap:12px;font-weight:700;color:var(--txt-h);font-family:"Space Grotesk",sans-serif;font-size:1.05rem;letter-spacing:-0.02em;transition:color 0.3s var(--ease)}
+.logo:hover{color:var(--accent-2)}
+.logo img{transition:transform 0.4s var(--ease),filter 0.4s var(--ease);border-radius:10px}
+.logo:hover img{transform:scale(1.03);filter:drop-shadow(0 0 14px rgba(52,211,153,0.22))}
+.logo-mark{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--accent) 0%,#06b6d4 100%);display:grid;place-items:center;color:#04111a;font-weight:800;font-size:1rem;box-shadow:0 4px 16px rgba(52,211,153,0.3)}
+.logo-txt{display:flex;flex-direction:column;line-height:1.1}
+.logo-sub{font-size:0.65rem;color:var(--txt-3);font-weight:500;letter-spacing:0.08em;text-transform:uppercase;font-family:"Inter",sans-serif;margin-top:3px;opacity:0.92}
+.nav-links{display:flex;gap:8px;align-items:center}
+.nav-links a{position:relative;color:var(--txt-2);font-size:0.875rem;font-weight:500;padding:8px 12px;border-radius:10px;transition:color 0.25s var(--ease),background 0.25s var(--ease)}
+.nav-links a::after{content:"";position:absolute;left:12px;right:12px;bottom:4px;height:1px;background:linear-gradient(90deg,var(--accent),#22d3ee);border-radius:1px;transform:scaleX(0);transform-origin:center;transition:transform 0.35s var(--ease);opacity:0.9}
+.nav-links a:hover{color:var(--txt-h);background:rgba(255,255,255,0.04)}
+.nav-links a:hover::after{transform:scaleX(1)}
+.nav-cta{display:flex;gap:10px;align-items:center}
+.nav-cta .btn{transition:transform 0.3s var(--ease),box-shadow 0.3s var(--ease),border-color 0.25s var(--ease),background 0.25s var(--ease)}
+.nav-cta .btn:active{transform:scale(0.98)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:11px 20px;border-radius:10px;font-weight:600;font-size:0.92rem;font-family:inherit;cursor:pointer;border:1px solid transparent;transition:all 0.2s var(--ease);white-space:nowrap}
+.btn-p{background:linear-gradient(135deg,var(--accent) 0%,var(--accent-2) 100%);color:#04111a;box-shadow:0 4px 14px rgba(52,211,153,0.25),inset 0 1px 0 rgba(255,255,255,0.2)}
+.btn-p:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(52,211,153,0.4);color:#04111a}
+.btn-s{background:var(--surface-2);color:var(--txt-h);border-color:var(--border-2)}
+.btn-s:hover{background:rgba(255,255,255,0.08);border-color:rgba(148,163,184,0.35)}
+.btn-g{background:transparent;color:var(--txt-2);border-color:var(--border-2)}
+.btn-g:hover{color:var(--txt-h);border-color:var(--accent);background:var(--accent-soft)}
+.btn-sm{padding:8px 14px;font-size:0.85rem}
+.btn-lg{padding:14px 28px;font-size:1rem}
+.hero{padding:120px 0 100px;position:relative}
+.hero-eyebrow{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;background:var(--accent-soft);border:1px solid rgba(52,211,153,0.25);border-radius:999px;font-size:0.8rem;color:var(--accent);font-weight:600;margin-bottom:24px;animation:fadeUp 0.6s var(--ease-out)}
+.hero-eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent);animation:pulse 2s infinite}
+.hero h1{font-size:clamp(2.4rem,5.5vw,4.2rem);font-weight:700;line-height:1.05;letter-spacing:-0.035em;color:var(--txt-h);margin-bottom:24px;max-width:880px;animation:fadeUp 0.7s var(--ease-out) 0.05s both}
+.hero h1 .grad{background:linear-gradient(135deg,var(--accent) 0%,#06b6d4 60%,#60a5fa 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.hero-sub{font-size:1.18rem;color:var(--txt-2);max-width:640px;margin-bottom:40px;line-height:1.55;animation:fadeUp 0.7s var(--ease-out) 0.15s both}
+.hero-actions{display:flex;gap:12px;flex-wrap:wrap;align-items:center;animation:fadeUp 0.7s var(--ease-out) 0.25s both}
+.hero-trust{display:flex;align-items:center;gap:18px;margin-top:28px;color:var(--txt-3);font-size:0.85rem;animation:fadeUp 0.7s var(--ease-out) 0.35s both;flex-wrap:wrap}
+.hero-trust .check{display:inline-flex;align-items:center;gap:6px}
+.hero-trust svg{width:14px;height:14px;color:var(--accent)}
+.hero-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;margin-top:72px;background:var(--border);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;animation:fadeUp 0.8s var(--ease-out) 0.45s both}
+.hstat{padding:24px 28px;background:var(--bg-2)}
+.hstat-v{font-family:"Space Grotesk",sans-serif;font-size:1.85rem;font-weight:700;color:var(--txt-h);letter-spacing:-0.02em;line-height:1}
+.hstat-l{font-size:0.82rem;color:var(--txt-3);margin-top:8px;font-weight:500}
+section{position:relative}
+.slabel{display:inline-block;font-size:0.8rem;color:var(--accent);font-weight:600;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:14px}
+.stitle{font-size:clamp(1.8rem,3.5vw,2.6rem);font-weight:700;color:var(--txt-h);letter-spacing:-0.025em;line-height:1.15;margin-bottom:16px;max-width:680px}
+.ssub{font-size:1.08rem;color:var(--txt-2);max-width:620px;margin-bottom:56px;line-height:1.55}
+.demo-sec{padding:80px 0;border-top:1px solid var(--border)}
+.demo-card{background:linear-gradient(180deg,rgba(255,255,255,0.04) 0%,rgba(255,255,255,0.02) 100%);border:1px solid var(--border-2);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-lg)}
+.demo-head{padding:18px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;background:rgba(0,0,0,0.2)}
+.demo-dots{display:flex;gap:6px}
+.demo-dot{width:11px;height:11px;border-radius:50%}
+.dot-r{background:#f87171}.dot-y{background:#fbbf24}.dot-g{background:#34d399}
+.demo-title{font-family:"JetBrains Mono",monospace;font-size:0.83rem;color:var(--txt-3)}
+.demo-row{display:flex;gap:10px;padding:22px;flex-wrap:wrap}
+.demo-row input{flex:1;min-width:240px;background:var(--bg);border:1px solid var(--border-2);color:var(--txt-h);padding:13px 16px;border-radius:10px;font-family:"JetBrains Mono",monospace;font-size:0.95rem;transition:all 0.2s var(--ease)}
+.demo-row input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.demo-row input::placeholder{color:var(--txt-3)}
+.demo-out{padding:0 22px 22px}
+.demo-out pre{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:18px;font-size:0.83rem;line-height:1.6;color:var(--txt);overflow-x:auto;max-height:380px;overflow-y:auto;font-family:"JetBrains Mono",monospace}
+.demo-hint{padding:0 22px 18px;color:var(--txt-3);font-size:0.8rem;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.demo-hint .lbl{margin-right:4px}
+.demo-hint span.ex{cursor:pointer;padding:4px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;font-family:"JetBrains Mono",monospace;transition:all 0.15s var(--ease)}
+.demo-hint span.ex:hover{color:var(--accent);border-color:var(--accent)}
+.code-card{background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-top:48px}
+.code-tabs{display:flex;background:rgba(0,0,0,0.25);border-bottom:1px solid var(--border);padding:0 12px;align-items:center;gap:4px;overflow-x:auto}
+.ctab{padding:14px 18px;color:var(--txt-3);font-size:0.85rem;font-weight:500;cursor:pointer;border:none;background:transparent;font-family:inherit;border-bottom:2px solid transparent;transition:all 0.2s var(--ease);white-space:nowrap}
+.ctab.on{color:var(--txt-h);border-bottom-color:var(--accent)}
+.ctab:hover{color:var(--txt-h)}
+.cpbtn{margin-left:auto;padding:6px 12px;font-size:0.78rem;color:var(--txt-3);background:transparent;border:1px solid var(--border-2);border-radius:6px;cursor:pointer;font-family:inherit;transition:all 0.15s var(--ease)}
+.cpbtn:hover{color:var(--txt-h);border-color:var(--accent)}
+.pane{display:none;padding:22px}
+.pane.on{display:block}
+.pane pre{font-size:0.85rem;line-height:1.65;color:var(--txt);overflow-x:auto;font-family:"JetBrains Mono",monospace}
+.feat-sec{padding:100px 0;border-top:1px solid var(--border)}
+.feat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.fcard{padding:30px;background:linear-gradient(180deg,rgba(255,255,255,0.025) 0%,rgba(255,255,255,0.01) 100%);border:1px solid var(--border);border-radius:var(--radius);transition:all 0.3s var(--ease);position:relative;overflow:hidden}
+.fcard:hover{border-color:var(--border-2);transform:translateY(-2px)}
+.ficon{width:42px;height:42px;border-radius:10px;background:var(--accent-soft);border:1px solid rgba(52,211,153,0.2);display:grid;place-items:center;margin-bottom:18px;color:var(--accent)}
+.ficon svg{width:22px;height:22px}
+.ftitle{font-size:1.08rem;font-weight:600;color:var(--txt-h);margin-bottom:10px;letter-spacing:-0.01em}
+.fdesc{color:var(--txt-2);font-size:0.92rem;line-height:1.6}
+.ep-sec{padding:100px 0;border-top:1px solid var(--border)}
+.ep-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+.epcard{padding:22px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);transition:all 0.25s var(--ease)}
+.epcard:hover{border-color:var(--accent);background:var(--surface-2)}
+.epmethod{display:inline-block;padding:3px 8px;background:var(--accent-soft);color:var(--accent);font-family:"JetBrains Mono",monospace;font-size:0.72rem;font-weight:600;border-radius:5px;margin-right:10px;letter-spacing:0.03em}
+.eppath{font-family:"JetBrains Mono",monospace;font-size:0.92rem;color:var(--txt-h);font-weight:500}
+.epdesc{color:var(--txt-2);font-size:0.88rem;margin-top:10px;line-height:1.5}
+.price-sec{padding:100px 0;border-top:1px solid var(--border)}
+.price-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.pcard{padding:30px 22px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);position:relative;transition:all 0.3s var(--ease);display:flex;flex-direction:column}
+.pcard:hover{border-color:var(--border-2);transform:translateY(-2px)}
+.pcard.hot{border-color:rgba(52,211,153,0.4);background:linear-gradient(180deg,rgba(52,211,153,0.06) 0%,rgba(52,211,153,0.02) 100%);box-shadow:0 0 0 1px rgba(52,211,153,0.15),0 12px 40px rgba(52,211,153,0.08)}
+.pbadge{position:absolute;top:-11px;left:50%;transform:translateX(-50%);padding:4px 12px;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#04111a;font-size:0.7rem;font-weight:700;border-radius:999px;letter-spacing:0.04em;text-transform:uppercase;box-shadow:0 4px 12px rgba(52,211,153,0.4)}
+.pname{font-family:"Space Grotesk",sans-serif;font-size:1.05rem;font-weight:600;color:var(--txt-h);margin-bottom:6px}
+.pprice{font-family:"Space Grotesk",sans-serif;font-size:2.3rem;font-weight:700;color:var(--txt-h);margin-bottom:6px;letter-spacing:-0.03em;line-height:1}
+.pprice .per{font-size:0.9rem;color:var(--txt-3);font-weight:500;margin-left:4px}
+.pdesc{color:var(--txt-2);font-size:0.86rem;margin-bottom:20px;min-height:42px;line-height:1.5}
+.pfeat{list-style:none;padding:0;margin:0 0 22px;flex:1}
+.pfeat li{padding:6px 0;color:var(--txt);font-size:0.88rem;display:flex;align-items:flex-start;gap:8px}
+.pfeat li svg{width:14px;height:14px;color:var(--accent);flex-shrink:0;margin-top:4px}.pfeat li.overage{color:var(--txt-3);font-size:0.83rem}.pfeat li.overage svg{color:var(--txt-3)!important;opacity:0.55}
+.uc-sec{padding:100px 0;border-top:1px solid var(--border)}
+.uc-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.uccard{padding:26px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
+.uctitle{font-size:1rem;font-weight:600;color:var(--txt-h);margin-bottom:8px}
+.ucdesc{color:var(--txt-2);font-size:0.9rem;line-height:1.6}
+.cta-sec{padding:90px 0;border-top:1px solid var(--border);text-align:center}
+.cta-card{max-width:760px;margin:0 auto;padding:60px 40px;background:linear-gradient(135deg,rgba(52,211,153,0.08) 0%,rgba(96,165,250,0.04) 100%);border:1px solid rgba(52,211,153,0.2);border-radius:var(--radius-lg);position:relative;overflow:hidden}
+.cta-card h2{font-size:clamp(1.8rem,3.5vw,2.4rem);margin-bottom:14px}
+.cta-card p{color:var(--txt-2);font-size:1.05rem;margin-bottom:28px}
+footer{position:relative;padding:72px 0 44px;color:var(--txt-3);overflow:hidden;border-top:1px solid rgba(148,163,184,0.08)}
+footer::before{content:"";position:absolute;inset:0;background:radial-gradient(ellipse 90% 60% at 50% 0%,rgba(52,211,153,0.055) 0%,transparent 58%),linear-gradient(180deg,rgba(10,20,38,0.35) 0%,transparent 45%);pointer-events:none;z-index:0}
+footer .container{position:relative;z-index:1}
+.footer-grid{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:40px 32px;margin-bottom:44px}
+.foot-brand{font-family:"Space Grotesk",sans-serif;font-weight:700;color:var(--txt-h);font-size:1.05rem;margin-bottom:10px;letter-spacing:-0.02em}
+.foot-product{display:block;font-size:0.72rem;font-weight:600;color:var(--accent);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:10px;font-family:"Inter",sans-serif;opacity:0.95}
+.foot-tag{font-size:0.88rem;color:var(--txt-2);max-width:300px;line-height:1.6;opacity:0.95;margin:0}
+.foot-h{font-size:0.72rem;font-weight:600;color:var(--txt-h);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.foot-h::before{content:"";width:6px;height:6px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#22d3ee);box-shadow:0 0 12px rgba(52,211,153,0.35);flex-shrink:0}
+.foot-l{display:block;color:var(--txt-2);font-size:0.875rem;padding:8px 12px 8px 10px;margin-left:-10px;border-left:2px solid transparent;border-radius:0 10px 10px 0;transition:color 0.25s var(--ease),transform 0.3s var(--ease),background 0.25s var(--ease),border-color 0.25s var(--ease)}
+.foot-l:hover{color:var(--txt-h);transform:translateX(4px);background:rgba(255,255,255,0.035);border-left-color:rgba(52,211,153,0.55)}
+.foot-email{cursor:pointer;-webkit-user-select:none;user-select:none}
+.foot-email:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.foot-bot{padding-top:32px;border-top:1px solid rgba(148,163,184,0.1);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px;font-size:0.82rem;color:var(--txt-3)}
+.foot-bot span{opacity:0.9}
+@media (max-width:880px){
+  .nav-links{display:none}
+  .hero{padding:80px 0 60px}
+  .hero-stats{grid-template-columns:repeat(2,1fr)}
+  .feat-grid,.uc-grid{grid-template-columns:1fr}
+  .ep-grid{grid-template-columns:1fr}
+  .price-grid{grid-template-columns:1fr;gap:18px}
+  .footer-grid{grid-template-columns:1fr 1fr;gap:28px}
+  .cta-card{padding:40px 24px}
+  body{background-attachment:scroll}
+}
+@media (max-width:520px){
+  .container{padding:0 18px}
+  nav{padding:10px 0}
+  .nav-inner{display:grid;grid-template-columns:1fr;gap:10px;align-items:center}
+  .logo{font-size:1rem;gap:10px;min-width:0}
+  .logo-txt{min-width:0}
+  .logo-txt span:first-child{white-space:nowrap}
+  .logo-sub{font-size:0.6rem;letter-spacing:0.07em;margin-top:2px;white-space:nowrap}
+  .nav-cta{display:grid;grid-template-columns:1fr 1fr;gap:10px;width:100%}
+  .nav-cta .btn{width:100%;min-height:36px;justify-content:center}
+  .btn-sm{padding:9px 10px;font-size:0.82rem}
+  .hero{padding:64px 0 48px}
+  .hero-sub{font-size:1.05rem}
+  .hstat{padding:18px 18px}
+  .demo-row{padding:18px}
+  .demo-row input{font-size:16px}
+  .btn{font-size:0.95rem}
+  .footer-grid{grid-template-columns:1fr;gap:24px}
+}
+@media (prefers-reduced-motion:reduce){
+  .logo img,.nav-links a,.nav-links a::after,.nav-cta .btn,.foot-l{transition:none!important}
+  .logo:hover img{transform:none;filter:none}
+  .nav-links a:hover::after{transform:none}
+  .foot-l:hover{transform:none}
+}
+</style>
+</head>
+<body>
+<nav>
+  <div class="container nav-inner">
+    <a href="#" class="logo">
+      <img src="/domainintel_logo.png" alt="Domain Intelligence" style="height:34px;border-radius:9px">
+      <div class="logo-txt">
+        <span>Domain Intelligence</span>
+        <span class="logo-sub">by Osiris Technical Institute</span>
+      </div>
+    </a>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#endpoints">Endpoints</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#usecases">Use Cases</a>
+      <a href="https://rapidapi.com/osiris-technical-institute-osiris-technical-institute-default/api/domain-intelligence-api" target="_blank" rel="noopener">Docs</a>
+    </div>
+    <div class="nav-cta">
+      <a href="https://rapidapi.com/osiris-technical-institute-osiris-technical-institute-default/api/domain-intelligence-api" class="btn btn-g btn-sm" target="_blank" rel="noopener">RapidAPI Listing</a>
+      <a href="#pricing" class="btn btn-p btn-sm">Get API Key</a>
+    </div>
+  </div>
+</nav>
+<section class="hero">
+  <div class="container">
+    <div class="hero-eyebrow"><span class="dot"></span>Live on RapidAPI &middot; Free tier available</div>
+    <h1>Every signal about a domain.<br><span class="grad">One REST call. Zero glue code.</span></h1>
+    <p class="hero-sub">WHOIS, DNS, SSL certificates, subdomains, and email security &mdash; aggregated, normalized, and cached. Built for engineers who need convenience, not 6 different libraries.</p>
+    <div class="hero-actions">
+      <a href="#pricing" class="btn btn-p btn-lg">Start free &rarr;</a>
+      <a href="#demo" class="btn btn-s btn-lg">Try the live demo</a>
+    </div>
+    <div class="hero-trust">
+      <span class="check"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 11.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>1,000 free requests/mo</span>
+      <span class="check"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 11.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>No credit card to start</span>
+      <span class="check"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 11.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>Edge-cached, sub-second p95</span>
+    </div>
+    <div class="hero-stats">
+      <div class="hstat"><div class="hstat-v">6</div><div class="hstat-l">Endpoints in one API</div></div>
+      <div class="hstat"><div class="hstat-v">&lt;200ms</div><div class="hstat-l">Median latency (cached)</div></div>
+      <div class="hstat"><div class="hstat-v">99.9%</div><div class="hstat-l">Uptime target</div></div>
+      <div class="hstat"><div class="hstat-v">RDAP</div><div class="hstat-l">Modern WHOIS protocol</div></div>
+    </div>
+  </div>
+</section>
+<section id="demo" class="demo-sec">
+  <div class="container">
+    <span class="slabel">Live demo</span>
+    <h2 class="stitle">See it work in 3 seconds.</h2>
+    <p class="ssub">Type any domain. We aggregate WHOIS, DNS, SSL, subdomains and email security in a single response.</p>
+    <div class="demo-card">
+      <div class="demo-head">
+        <div class="demo-dots"><div class="demo-dot dot-r"></div><div class="demo-dot dot-y"></div><div class="demo-dot dot-g"></div></div>
+        <div class="demo-title">GET /lookup/{domain}</div>
+      </div>
+      <div class="demo-row">
+        <input id="domainIn" type="text" placeholder="example.com" value="" autocomplete="off" spellcheck="false">
+        <button class="btn btn-p" id="runDemo">Run lookup</button>
+      </div>
+      <div class="demo-hint">
+        <span class="lbl">Try:</span>
+        <span class="ex" data-d="stripe.com">stripe.com</span>
+        <span class="ex" data-d="openai.com">openai.com</span>
+        <span class="ex" data-d="cloudflare.com">cloudflare.com</span>
+        <span class="ex" data-d="vercel.com">vercel.com</span>
+        <span id="demoCounter" style="margin-left:auto;font-family:monospace;font-size:0.78rem;color:var(--txt-3)">0 / 5 today</span>
+      </div>
+      <div class="demo-out"><pre id="demoOut">// Click "Run lookup" to see a live response</pre></div>
+    </div>
+    <div class="code-card">
+      <div class="code-tabs">
+        <button class="ctab on" data-t="curl">cURL</button>
+        <button class="ctab" data-t="py">Python</button>
+        <button class="ctab" data-t="node">Node.js</button>
+        <button class="ctab" data-t="php">PHP</button>
+        <button class="cpbtn" id="copyBtn">Copy</button>
+      </div>
+      <div class="pane on" data-p="curl"><pre id="snip-curl">curl --request GET \
+  --url "https://domain-intelligence-api.p.rapidapi.com/lookup/example.com" \
+  --header "X-RapidAPI-Host: domain-intelligence-api.p.rapidapi.com" \
+  --header "X-RapidAPI-Key: YOUR_RAPIDAPI_KEY"</pre></div>
+      <div class="pane" data-p="py"><pre id="snip-py">import requests
+
+url = "https://domain-intelligence-api.p.rapidapi.com/lookup/example.com"
+headers = {
+    "X-RapidAPI-Host": "domain-intelligence-api.p.rapidapi.com",
+    "X-RapidAPI-Key": "YOUR_RAPIDAPI_KEY",
+}
+r = requests.get(url, headers=headers, timeout=15)
+data = r.json()
+print(data["ssl"]["issuer"], data["whois"]["registrar"])</pre></div>
+      <div class="pane" data-p="node"><pre id="snip-node">import fetch from "node-fetch";
+
+const res = await fetch(
+  "https://domain-intelligence-api.p.rapidapi.com/lookup/example.com",
+  { headers: {
+      "X-RapidAPI-Host": "domain-intelligence-api.p.rapidapi.com",
+      "X-RapidAPI-Key": "YOUR_RAPIDAPI_KEY",
+  }}
+);
+const data = await res.json();
+console.log(data.dns.A, data.email_security.spf);</pre></div>
+      <div class="pane" data-p="php"><pre id="snip-php">&lt;?php
+$ch = curl_init("https://domain-intelligence-api.p.rapidapi.com/lookup/example.com");
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($ch, CURLOPT_HTTPHEADER, [
+    "X-RapidAPI-Host: domain-intelligence-api.p.rapidapi.com",
+    "X-RapidAPI-Key: YOUR_RAPIDAPI_KEY",
+]);
+$data = json_decode(curl_exec($ch), true);
+echo $data["subdomains"]["count"];</pre></div>
+    </div>
+  </div>
+</section>
+<section id="features" class="feat-sec">
+  <div class="container">
+    <span class="slabel">Why this API</span>
+    <h2 class="stitle">Six signals. One call. Zero glue code.</h2>
+    <p class="ssub">Stop stitching together python-whois, dnspython, raw socket SSL probes, and three different subdomain enumeration tools. We do it once, properly, and cache the result.</p>
+    <div class="feat-grid">
+      <div class="fcard"><div class="ficon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></div><div class="ftitle">Aggregated &amp; normalized</div><div class="fdesc">DNS, WHOIS, SSL, subdomains, email security &mdash; combined into one consistent JSON shape. No vendor-specific quirks to handle.</div></div>
+      <div class="fcard"><div class="ficon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/><path d="M3 12h18"/><path d="M12 3a14 14 0 010 18"/><path d="M12 3a14 14 0 000 18"/></svg></div><div class="ftitle">Modern RDAP WHOIS</div><div class="fdesc">We use RDAP-first with WHOIS fallback. Structured JSON output, not regex-parsed text. Handles new gTLDs and ccTLDs gracefully.</div></div>
+      <div class="fcard"><div class="ficon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg></div><div class="ftitle">SSL certificate intel</div><div class="fdesc">Issuer, validity window, SANs, key algorithm, days-until-expiry. Detect misconfigured or expiring certs before they break production.</div></div>
+      <div class="fcard"><div class="ficon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg></div><div class="ftitle">Email security audit</div><div class="fdesc">SPF parsing, DMARC policy extraction, MX lookup, DNSBL checks. Find phishing risk and deliverability gaps in seconds.</div></div>
+      <div class="fcard"><div class="ficon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div><div class="ftitle">Edge-cached performance</div><div class="fdesc">Redis-backed cache with smart TTLs (DNS 5min, WHOIS 1hr, SSL 6hr). Cached responses return in &lt;100ms. Fresh queries timeout-protected.</div></div>
+      <div class="fcard"><div class="ficon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9c2.39 0 4.68.94 6.36 2.64"/></svg></div><div class="ftitle">Production-ready</div><div class="fdesc">Per-endpoint timeouts, structured JSON logging, Prometheus metrics, graceful 502s on upstream failure. Built to live in your monitoring stack.</div></div>
+    </div>
+  </div>
+</section>
+<section id="endpoints" class="ep-sec">
+  <div class="container">
+    <span class="slabel">Endpoints</span>
+    <h2 class="stitle">Six focused endpoints. Or one that returns everything.</h2>
+    <p class="ssub">Pull just what you need or grab the full picture in a single round trip. All endpoints return consistent JSON, with timestamp and source attribution.</p>
+    <div class="ep-grid">
+      <div class="epcard"><div><span class="epmethod">GET</span><span class="eppath">/lookup/{domain}</span></div><div class="epdesc">Aggregate everything &mdash; DNS + SSL + WHOIS + subdomains + email security in one parallel call. The endpoint most users want.</div></div>
+      <div class="epcard"><div><span class="epmethod">GET</span><span class="eppath">/domain/{d}/dns</span></div><div class="epdesc">A, AAAA, MX, NS, TXT, CNAME, SOA records. All record types resolved in parallel with TTL preserved.</div></div>
+      <div class="epcard"><div><span class="epmethod">GET</span><span class="eppath">/domain/{d}/ssl</span></div><div class="epdesc">Live TLS handshake. Issuer, valid_from, valid_to, days remaining, SANs, signature algorithm, key bits.</div></div>
+      <div class="epcard"><div><span class="epmethod">GET</span><span class="eppath">/domain/{d}/whois</span></div><div class="epdesc">RDAP-first lookup with WHOIS fallback. Registrar, registrant, name servers, creation/expiry dates, status codes.</div></div>
+      <div class="epcard"><div><span class="epmethod">GET</span><span class="eppath">/domain/{d}/subdomains</span></div><div class="epdesc">Subdomain enumeration via concurrent multi-source aggregation &mdash; crt.sh, certspotter, and hackertarget queried in parallel. Graceful fallback ensures results even when individual sources are down. Deduplicated and sorted.</div></div>
+      <div class="epcard"><div><span class="epmethod">GET</span><span class="eppath">/domain/{d}/email-security</span></div><div class="epdesc">SPF record parse, DMARC policy, MX servers, plus DNSBL reputation across major blocklists.</div></div>
+    </div>
+  </div>
+</section>
+<section id="pricing" class="price-sec">
+  <div class="container">
+    <span class="slabel">Pricing</span>
+    <h2 class="stitle">Pay only for what you use.</h2>
+    <p class="ssub">Billed monthly via RapidAPI. Cancel anytime. Overages are charged per request beyond your monthly quota. Cached responses count the same as fresh.</p>
+    <div class="price-grid">
+      <div class="pcard">
+        <div class="pname">BASIC</div>
+        <div class="pprice">$0<span class="per">/mo</span></div>
+        <div class="pdesc">Everything you need to evaluate the API and ship a hobby project.</div>
+        <ul class="pfeat">
+          <li><svg viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 11.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>1,000 requests / month</li>
+          <li><svg viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 11.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>All 6 endpoints</li>
+          <li><svg viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 11.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>Edge cache included</li>
+          <li><svg viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 11.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>No credit card required</li>
+        </ul>
+        <a href="https://rapidapi.com/osiris-technical-institute-osiris-technical-institute-default/api/domain-intelligence-api/pricing" class="btn btn-s" target="_blank" rel="noopener">Start free</a>
+      </div>
+      <div class="pcard hot">
+        <div class="pbadge">Most popular</div>
+        <div class="pname">PRO</div>
+        <div class="pprice">$9.99<span class="per">/mo</span></div>
+        <div class="pdesc">For production apps doing real volume. The sweet spot for most teams.</div>
+        <ul class="pfeat">
+          <li><svg viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 11.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>50,000 requests / month</li>
+          <li class="overage"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm.75 3.5a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM7.25 7h1.5v4.5h-1.5V7z"/></svg>Overages: $0.0005 / req</li>
+          <li><svg viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 11.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>Higher rate limits</li>
+          <li><svg viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 11.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>Priority cache warmup</li>
+          <li><svg viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 11.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>Email support</li>
+        </ul>
+        <a href="https://rapidapi.com/osiris-technical-institute-osiris-technical-institute-default/api/domain-intelligence-api/pricing" class="btn btn-p" target="_blank" rel="noopener">Choose PRO</a>
+      </div>
+      <div class="pcard">
+        <div class="pname">ULTRA</div>
+        <div class="pprice">$39.99<span class="per">/mo</span></div>
+        <div class="pdesc">For SaaS platforms with embedded domain features and growing customer bases.</div>
+        <ul class="pfeat">
+          <li><svg viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 11.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>500,000 requests / month</li>
+          <li class="overage"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm.75 3.5a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM7.25 7h1.5v4.5h-1.5V7z"/></svg>Overages: $0.0002 / req</li>
+          <li><svg viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 11.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>Burst tolerance</li>
+          <li><svg viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 11.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>SLA: 99.9% uptime</li>
+          <li><svg viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 11.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>Priority support</li>
+        </ul>
+        <a href="https://rapidapi.com/osiris-technical-institute-osiris-technical-institute-default/api/domain-intelligence-api/pricing" class="btn btn-s" target="_blank" rel="noopener">Choose ULTRA</a>
+      </div>
+      <div class="pcard">
+        <div class="pname">MEGA</div>
+        <div class="pprice">$149.99<span class="per">/mo</span></div>
+        <div class="pdesc">For data platforms, security vendors, and high-volume scanning workloads.</div>
+        <ul class="pfeat">
+          <li><svg viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 11.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>5,000,000 requests / month</li>
+          <li class="overage"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm.75 3.5a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM7.25 7h1.5v4.5h-1.5V7z"/></svg>Overages: $0.0001 / req</li>
+          <li><svg viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 11.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>Highest concurrency</li>
+          <li><svg viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 11.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>Bulk lookup optimization</li>
+          <li><svg viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 11.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>Dedicated support channel</li>
+        </ul>
+        <a href="https://rapidapi.com/osiris-technical-institute-osiris-technical-institute-default/api/domain-intelligence-api/pricing" class="btn btn-s" target="_blank" rel="noopener">Choose MEGA</a>
+      </div>
+    </div>
+  </div>
+</section>
+<section id="usecases" class="uc-sec">
+  <div class="container">
+    <span class="slabel">Use cases</span>
+    <h2 class="stitle">Built for engineers who deal with domains daily.</h2>
+    <p class="ssub">Our customers use Domain Intelligence to power security tools, sales platforms, registrars, deliverability dashboards, and asset management products.</p>
+    <div class="uc-grid">
+      <div class="uccard"><div class="uctitle">Security &amp; threat intel</div><div class="ucdesc">Enrich indicators of compromise. Spot newly registered look-alike domains. Audit certificate issuance and DNS posture during incident response.</div></div>
+      <div class="uccard"><div class="uctitle">Sales &amp; lead enrichment</div><div class="ucdesc">Look up MX provider, hosting clues, registration age, and corporate email setup before adding a lead to your CRM. Score domains automatically.</div></div>
+      <div class="uccard"><div class="uctitle">Email deliverability</div><div class="ucdesc">Validate SPF, DMARC, and DKIM-supporting MX setup before sending. Catch policy gaps that hurt sender reputation and inbox placement.</div></div>
+      <div class="uccard"><div class="uctitle">Domain registrars &amp; resellers</div><div class="ucdesc">Power your customer dashboard with live SSL state, DNS health, and WHOIS info without maintaining your own scraping fleet.</div></div>
+      <div class="uccard"><div class="uctitle">Attack surface management</div><div class="ucdesc">Continuous subdomain discovery via crt.sh. Track new SSL certificates issued for assets you own. Detect shadow IT before attackers do.</div></div>
+      <div class="uccard"><div class="uctitle">SaaS onboarding</div><div class="ucdesc">When a customer adds a custom domain, validate DNS, SSL, and ownership signals in one call. Cut onboarding time from minutes to seconds.</div></div>
+    </div>
+  </div>
+</section>
+<section class="cta-sec">
+  <div class="container">
+    <div class="cta-card">
+      <h2>Ship a domain feature this afternoon.</h2>
+      <p>Free tier &middot; No credit card &middot; Production-ready in one HTTP call.</p>
+      <a href="https://rapidapi.com/osiris-technical-institute-osiris-technical-institute-default/api/domain-intelligence-api" class="btn btn-p btn-lg" target="_blank" rel="noopener">Get your API key &rarr;</a>
+    </div>
+  </div>
+</section>
+<footer>
+  <div class="container">
+    <div class="footer-grid">
+      <div>
+        <div class="foot-brand">Osiris Technical Institute</div>
+        <span class="foot-product">Domain Intelligence</span>
+        <p class="foot-tag">Production domain intelligence API &mdash; WHOIS, DNS, SSL, subdomains, and email security in one integration.</p>
+      </div>
+      <div>
+        <div class="foot-h">Product</div>
+        <a class="foot-l" href="#features">Features</a>
+        <a class="foot-l" href="#endpoints">Endpoints</a>
+        <a class="foot-l" href="#pricing">Pricing</a>
+        <a class="foot-l" href="#demo">Live demo</a>
+      </div>
+      <div>
+        <div class="foot-h">Resources</div>
+        <a class="foot-l" href="https://rapidapi.com/osiris-technical-institute-osiris-technical-institute-default/api/domain-intelligence-api" target="_blank" rel="noopener">RapidAPI listing</a>
+        <a class="foot-l" href="https://rapidapi.com/osiris-technical-institute-osiris-technical-institute-default/api/domain-intelligence-api" target="_blank" rel="noopener">API documentation</a>
+        <a class="foot-l" href="#usecases">Use cases</a>
+      </div>
+      <div>
+        <div class="foot-h">Contact</div>
+        <a class="foot-l foot-email" id="footEmailLink" href="mailto:osiris.agent@mail.com" title="Click to copy email">osiris.agent@mail.com</a>
+      </div>
+    </div>
+    <div class="foot-bot">
+      <span>&copy; 2026 Osiris Technical Institute. All rights reserved.</span>
+      
+    </div>
+  </div>
+</footer>
+<script>
+(function(){
+  var DEMO_LIMIT=5;
+  function todayKey(){return "demo_used_"+new Date().toDateString();}
+  function getUsed(){return parseInt(localStorage.getItem(todayKey())||"0",10);}
+  function incUsed(){var n=getUsed()+1;localStorage.setItem(todayKey(),n);return n;}
+  function updateCounter(u){var el=document.getElementById("demoCounter");if(!el)return;el.textContent=(u||0)+" / "+DEMO_LIMIT+" today";el.style.color=u>=DEMO_LIMIT?"var(--accent)":"var(--txt-3)";}
+  var inEl=document.getElementById("domainIn");
+  var outEl=document.getElementById("demoOut");
+  updateCounter(getUsed());
+  function run(){
+    var d=inEl.value.trim();
+    if(!d){outEl.textContent="// Enter a domain";return;}
+    if(!/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(d)){outEl.textContent="// Invalid domain format";return;}
+    if(getUsed()>=DEMO_LIMIT){outEl.textContent="// Free demo limit reached ("+DEMO_LIMIT+"/day).\n// Subscribe for more usage.";updateCounter(DEMO_LIMIT);return;}
+    outEl.textContent="// Querying "+d+"...";
+    fetch("/demo/"+encodeURIComponent(d)).then(function(r){
+      if(r.status===429){return r.json().then(function(j){outEl.textContent="// Rate limit reached. Try again tomorrow.\n// Subscribe for more usage.";updateCounter(DEMO_LIMIT);});}
+      return r.json().then(function(data){outEl.textContent=JSON.stringify(data,null,2);updateCounter(incUsed());});
+    }).catch(function(err){outEl.textContent="// Error: "+err.message;});
+  }
+  document.getElementById("runDemo").addEventListener("click",run);
+  inEl.addEventListener("keydown",function(e){if(e.key==="Enter")run();});
+  document.querySelectorAll(".ex").forEach(function(el){el.addEventListener("click",function(){inEl.value=el.dataset.d;run();});});
+  outEl.textContent = "// Enter a domain above and click Run lookup to see live API results.";
+  document.querySelectorAll(".ctab").forEach(function(t){t.addEventListener("click",function(){
+    var k=t.dataset.t;
+    document.querySelectorAll(".ctab").forEach(function(x){x.classList.remove("on");});
+    document.querySelectorAll(".pane").forEach(function(p){p.classList.remove("on");});
+    t.classList.add("on");
+    document.querySelector(".pane[data-p=\""+k+"\"]").classList.add("on");
+  });});
+  document.getElementById("copyBtn").addEventListener("click",function(){
+    var p=document.querySelector(".pane.on pre");
+    if(!p)return;
+    navigator.clipboard.writeText(p.textContent).then(function(){
+      var b=document.getElementById("copyBtn");var o=b.textContent;b.textContent="Copied";setTimeout(function(){b.textContent=o;},1500);
+    });
+  });
+  var footMail=document.getElementById("footEmailLink");
+  if(footMail){
+    footMail.addEventListener("click",function(e){
+      e.preventDefault();
+      var addr=footMail.getAttribute("href").replace(/^mailto:/i,"");
+      navigator.clipboard.writeText(addr).then(function(){
+        var o=footMail.textContent;
+        footMail.textContent="Copied to clipboard";
+        setTimeout(function(){footMail.textContent=o;},1600);
+      }).catch(function(){window.location.href=footMail.getAttribute("href");});
+    });
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+[Unit]
+Description=Domain Intelligence FastAPI service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/agent/services/domain-intel
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=/etc/domain-intel.env
+ExecStart=/usr/bin/python3 -m uvicorn app.main:app --host 127.0.0.1 --port 8001 --workers 1
+Restart=always
+RestartSec=3
+StandardOutput=append:/agent/services/domain-intel/service.log
+StandardError=append:/agent/services/domain-intel/service.log
+
+[Install]
+WantedBy=multi-user.target
