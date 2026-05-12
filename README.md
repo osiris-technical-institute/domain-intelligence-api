@@ -7,7 +7,7 @@
 
 > Aggregate domain reconnaissance — **DNS, WHOIS/RDAP, SSL/TLS, subdomains, and email security posture** — in a single REST call.
 
-A FastAPI service that pulls six categories of public domain intelligence concurrently and returns clean, predictable JSON. Built for security teams, threat-intel enrichment pipelines, and domain monitoring SaaS. Sub-second responses on cache hits, no LLMs in the request path.
+A FastAPI service that pulls five categories of public domain intelligence concurrently and returns clean, predictable JSON. Built for security teams, threat-intel enrichment pipelines, and domain monitoring SaaS. Sub-second responses on cache hits, no LLMs in the request path.
 
 - **Live API:** <https://oti-labs.com/domain-intelligence-api>
 - **Pricing & API key:** [RapidAPI listing](https://rapidapi.com/osiris-technical-institute-osiris-technical-institute-default/api/domain-intelligence-api)
@@ -57,7 +57,7 @@ const res = await fetch(
 const data = await res.json();
 ```
 
-More request/response examples in [`rapidapi/example_requests.md`](rapidapi/example_requests.md).
+Full OpenAPI spec: [`rapidapi/openapi.json`](rapidapi/openapi.json).
 
 ---
 
@@ -70,7 +70,7 @@ More request/response examples in [`rapidapi/example_requests.md`](rapidapi/exam
 | `GET` | `/domain/{d}/whois` | Registration data via RDAP, with port-43 WHOIS fallback |
 | `GET` | `/domain/{d}/ssl` | Live TLS handshake — issuer, validity window, SAN list, key strength |
 | `GET` | `/domain/{d}/subdomains` | crt.sh + certspotter + hackertarget concurrent enum, DNS bruteforce fallback |
-| `GET` | `/domain/{d}/email-security` | SPF, DKIM, DMARC, MX policy, DNSBL listing status |
+| `GET` | `/domain/{d}/email-security` | SPF + DMARC presence and records. DKIM stub only (selector-required). |
 
 All endpoints accept the bare hostname as a path parameter (no scheme, no trailing slash). Punycode-encoded IDN domains are supported.
 
@@ -131,15 +131,12 @@ app/                  FastAPI service code
   whois_lookup.py     RDAP chain + port-43 fallback
   ssl_lookup.py       Live TLS handshake
   subdomains.py       crt.sh + certspotter + hackertarget + DNS bruteforce
-  email_security.py   SPF / DKIM / DMARC / DNSBL
+  email_security.py   SPF + DMARC; DKIM stub
   metrics.py          Prometheus exporter
   logging_config.py   Structured JSON logging
   timeouts.py         asyncio.wait_for helpers
 rapidapi/
   openapi.json        OpenAPI 3.0 spec
-  example_requests.md Per-endpoint request/response samples
-  listing.md          Marketplace listing copy
-  spotlight.md        Editorial spotlight copy
   terms.md            Terms of use
 landing.html          Public landing page (served at oti-labs.com/domain-intelligence-api)
 domain-intel.service  systemd unit
