@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Domain Intelligence API",
-    "description": "Aggregate domain reconnaissance in a single API call — DNS, WHOIS/RDAP, SSL/TLS, subdomain enumeration via Certificate Transparency logs, and email security posture (SPF + DMARC). Sub-second on cache hits, no LLMs in the request path. Built for security teams, threat-intel enrichment, and domain monitoring SaaS.",
+    "description": "Aggregate domain reconnaissance in a single API call — DNS, WHOIS/RDAP, SSL/TLS, subdomain enumeration via Certificate Transparency logs, and email security posture (SPF, DMARC, DKIM via common-selector probing). Sub-second on cache hits, no LLMs in the request path. Built for security teams, threat-intel enrichment, and domain monitoring SaaS.",
     "version": "0.2.0",
     "x-rapidapi-category": "Data",
     "contact": {
@@ -21,7 +21,7 @@
     { "name": "SSL", "description": "TLS/SSL certificate inspection" },
     { "name": "WHOIS", "description": "Domain registration data (RDAP + port-43 fallback)" },
     { "name": "Subdomains", "description": "Subdomain discovery via Certificate Transparency logs with DNS bruteforce fallback" },
-    { "name": "Email Security", "description": "SPF and DMARC posture" },
+    { "name": "Email Security", "description": "SPF, DMARC, and DKIM (auto-discovered via ~29 common selectors)" },
     { "name": "Demo", "description": "Public rate-limited demo endpoint" },
     { "name": "Utility", "description": "Service utilities" }
   ],
@@ -118,7 +118,7 @@
     "/domain/{domain}/email-security": {
       "get": {
         "summary": "Email Security Posture",
-        "description": "Returns SPF and DMARC posture (presence + records). DKIM requires a selector and is not auto-discoverable, so the endpoint returns a note rather than auto-probing.",
+        "description": "Returns SPF, DMARC, and DKIM posture (presence + records). DKIM keys are auto-discovered by probing ~29 common selectors used by major mail providers (Google Workspace, Microsoft 365, Mailchimp, SendGrid, Postmark, Mandrill, etc.) plus generic catchalls. Custom or hash-based selectors (e.g. Amazon SES) aren't auto-discoverable.",
         "operationId": "email_only_domain__domain__email_security_get",
         "tags": ["Email Security"],
         "parameters": [
