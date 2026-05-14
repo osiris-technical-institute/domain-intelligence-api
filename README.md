@@ -92,7 +92,7 @@ Redis-backed response cache with per-endpoint TTLs:
 | DNS | 5 min |
 | WHOIS | 1 hour |
 | SSL | 6 hours |
-| Subdomains | 1 hour |
+| Subdomains | 24 hours |
 | Email security | 1 hour |
 
 ## Pricing
