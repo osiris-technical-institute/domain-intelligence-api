@@ -70,7 +70,7 @@ Full OpenAPI spec: [`rapidapi/openapi.json`](rapidapi/openapi.json).
 | `GET` | `/domain/{d}/whois` | Registration data via RDAP, with port-43 WHOIS fallback |
 | `GET` | `/domain/{d}/ssl` | Live TLS handshake — issuer, validity window, SAN list, key strength |
 | `GET` | `/domain/{d}/subdomains` | crt.sh + certspotter + hackertarget concurrent enum, DNS bruteforce fallback |
-| `GET` | `/domain/{d}/email-security` | SPF + DMARC presence and records. DKIM stub only (selector-required). |
+| `GET` | `/domain/{d}/email-security` | SPF + DMARC presence/records. DKIM keys auto-probed across ~29 common selectors (Google, Microsoft 365, Mailchimp, SendGrid, etc.). |
 
 All endpoints accept the bare hostname as a path parameter (no scheme, no trailing slash). Punycode-encoded IDN domains are supported.
 
@@ -131,7 +131,7 @@ app/                  FastAPI service code
   whois_lookup.py     RDAP chain + port-43 fallback
   ssl_lookup.py       Live TLS handshake
   subdomains.py       crt.sh + certspotter + hackertarget + DNS bruteforce
-  email_security.py   SPF + DMARC; DKIM stub
+  email_security.py   SPF + DMARC + DKIM (common-selector probing)
   metrics.py          Prometheus exporter
   logging_config.py   Structured JSON logging
   timeouts.py         asyncio.wait_for helpers
