@@ -47,6 +47,7 @@ print(data["ssl"]["issuer"], data["whois"]["registrar"])
 ```
 
 ```javascript
+// Node 18+ has built-in fetch — no import needed
 const res = await fetch(
   "https://domain-intelligence-api.p.rapidapi.com/lookup/example.com",
   { headers: {
@@ -66,10 +67,10 @@ Full OpenAPI spec: [`rapidapi/openapi.json`](rapidapi/openapi.json).
 | Method | Path | Returns |
 |--------|------|---------|
 | `GET` | `/lookup/{domain}` | **Aggregate** — DNS + WHOIS + SSL + subdomains + email-security in one parallel call. The endpoint most users want. |
-| `GET` | `/domain/{d}/dns` | A, AAAA, MX, TXT, NS, CNAME, SOA |
-| `GET` | `/domain/{d}/whois` | Registration data via RDAP, with port-43 WHOIS fallback |
+| `GET` | `/domain/{d}/dns` | A, AAAA, MX, TXT, NS, CAA, SOA |
+| `GET` | `/domain/{d}/whois` | Registration data via a 4-tier fallback chain (RDAP → port-43 WHOIS) |
 | `GET` | `/domain/{d}/ssl` | Live TLS handshake — issuer, validity window, SAN list, key strength |
-| `GET` | `/domain/{d}/subdomains` | crt.sh + certspotter + hackertarget concurrent enum, DNS bruteforce fallback |
+| `GET` | `/domain/{d}/subdomains` | 5-source concurrent enumeration (crt.sh, certspotter, hackertarget, AlienVault OTX, VirusTotal) + always-on DNS bruteforce |
 | `GET` | `/domain/{d}/email-security` | SPF + DMARC presence/records. DKIM keys auto-probed across ~29 common selectors (Google, Microsoft 365, Mailchimp, SendGrid, etc.). |
 
 All endpoints accept the bare hostname as a path parameter (no scheme, no trailing slash). Punycode-encoded IDN domains are supported.
@@ -78,10 +79,22 @@ All endpoints accept the bare hostname as a path parameter (no scheme, no traili
 
 ## Why it's resilient
 
-- **WHOIS:** RDAP via `rdap.org` → IANA bootstrap → legacy port-43, every step under an `asyncio.wait_for` timeout. The endpoint reports which source returned the data via a `_source` field.
-- **Subdomains:** crt.sh + certspotter + hackertarget run concurrently. If all CT log sources fail, the endpoint falls back to a DNS bruteforce wordlist. Whatever succeeded is returned, with a `warnings[]` field naming what didn't.
-- **SSL:** Direct TLS handshake against the host — no third-party scanner, no rate limit, accurate certificate chain.
-- **All upstream calls** are timeout-bounded (DNS 5s, WHOIS 8s, SSL 8s, subdomains 10s, email 6s). The aggregate `/lookup` endpoint completes in ~3-5s uncached, ~50ms cached.
+- **WHOIS — 4-tier fallback chain:**
+  1. `rdap.org` universal redirect (~4s timeout)
+  2. IANA RDAP bootstrap → authoritative TLD-specific RDAP server (bootstrap cached 24h)
+  3. Hardcoded RDAP base URLs for 22 common TLDs (.com, .net, .org, .info, .io, .ai, .app, .dev, .xyz, .me, .tv, .uk, .de, .eu, etc.) for resilience when the bootstrap is slow
+  4. **Port-43 socket WHOIS** with 50+ TLD-specific servers (all gTLDs plus 35+ ccTLDs incl. .fr, .nl, .au, .ca, .jp, .ru, .cn, .br, .es, .it, .ch, .at, .pl, .se, .no, .fi, .dk, .be, .ie, .nz, .za, .in, .kr, .sg, and more). For any TLD not pre-mapped, the client queries `whois.iana.org` and follows the `refer:` line.
+
+  Every tier has its own short timeout. The response includes a `_source` field naming which tier succeeded (e.g. `"rdap.org"`, `"port43:whois.verisign-grs.com"`).
+
+- **Subdomains — 6 parallel sources with structural floor:**
+  - **5 upstream sources** run concurrently via `asyncio.gather`: crt.sh (7s timeout), certspotter, hackertarget, AlienVault OTX, VirusTotal v3.
+  - **Always-on DNS bruteforce** against a curated 686-word wordlist via public resolvers (1.1.1.1, 8.8.8.8, 9.9.9.9), 100 concurrent / 1s per name. Runs *every time* alongside the upstream sources — not just as fallback — so the response is never empty regardless of upstream status.
+  - Results merged, deduplicated, sorted. The `sources_used` array reports per-source status. `warnings` is coverage-aware (only populated when total found drops below 20 subdomains).
+
+- **SSL:** Direct TLS handshake against the host — no third-party scanner, no rate limit, accurate certificate chain. 5s socket timeout.
+
+- **All upstream calls** are timeout-bounded via `asyncio.wait_for` (DNS 5s, WHOIS 8s, SSL 8s, subdomains 10s, email 6s). The aggregate `/lookup` endpoint completes in ~1-5s uncached, ~50ms cached.
 
 ## Caching
 
@@ -119,6 +132,8 @@ uvicorn app.main:app --host 127.0.0.1 --port 8001
 
 The service expects Redis at `localhost:6379` (set `REDIS_URL` to override). For TLS termination behind a real domain, point Caddy or nginx at `127.0.0.1:8001`. To require an auth header, set `RAPIDAPI_PROXY_SECRET` and have your reverse proxy enforce `X-RapidAPI-Proxy-Secret` on inbound requests.
 
+For AlienVault OTX and VirusTotal subdomain sources, set `OTX_API_KEY` and `VT_API_KEY` in the environment. Both are optional — missing keys cause those sources to no-op cleanly, the other four sources still run.
+
 The included [`domain-intel.service`](domain-intel.service) is a working systemd unit that mirrors the production deployment.
 
 ## Repo layout
@@ -127,11 +142,11 @@ The included [`domain-intel.service`](domain-intel.service) is a working systemd
 app/                  FastAPI service code
   main.py             Routes, middleware, app wiring
   cache.py            Redis cache layer
-  dns_lookup.py       DNS resolver
-  whois_lookup.py     RDAP chain + port-43 fallback
+  dns_lookup.py       DNS resolver (A, AAAA, MX, TXT, NS, CAA, SOA)
+  whois_lookup.py     4-tier WHOIS chain: rdap.org → IANA bootstrap → 22 hardcoded RDAP servers → port-43 socket WHOIS (50+ TLDs + IANA referral)
   ssl_lookup.py       Live TLS handshake
-  subdomains.py       crt.sh + certspotter + hackertarget + DNS bruteforce
-  email_security.py   SPF + DMARC + DKIM (common-selector probing)
+  subdomains.py       6 parallel sources: crt.sh, certspotter, hackertarget, AlienVault OTX, VirusTotal, always-on DNS bruteforce (686-word wordlist)
+  email_security.py   SPF + DMARC + DKIM (auto-probed across ~29 common selectors)
   metrics.py          Prometheus exporter
   logging_config.py   Structured JSON logging
   timeouts.py         asyncio.wait_for helpers

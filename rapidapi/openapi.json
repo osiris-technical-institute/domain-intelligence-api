@@ -2,9 +2,9 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Domain Intelligence API",
-    "description": "Aggregate domain reconnaissance in a single API call — DNS, WHOIS/RDAP, SSL/TLS, subdomain enumeration via Certificate Transparency logs, and email security posture (SPF, DMARC, DKIM via common-selector probing). Sub-second on cache hits, no LLMs in the request path. Built for security teams, threat-intel enrichment, and domain monitoring SaaS.",
-    "version": "0.2.0",
-    "x-rapidapi-category": "Data",
+    "description": "Aggregate domain reconnaissance in a single API call — DNS, WHOIS/RDAP, SSL/TLS, subdomain enumeration via Certificate Transparency logs + passive DNS + always-on DNS bruteforce, and email security posture (SPF, DMARC, DKIM via common-selector probing). Sub-second on cache hits, no LLMs in the request path. Built for security teams, threat-intel enrichment, and domain monitoring SaaS.",
+    "version": "0.6.0",
+    "x-rapidapi-category": "Cybersecurity",
     "contact": {
       "name": "Domain Intel API Support"
     }
@@ -17,10 +17,10 @@
   ],
   "tags": [
     { "name": "Aggregate", "description": "All-in-one domain intelligence" },
-    { "name": "DNS", "description": "DNS record lookups" },
-    { "name": "SSL", "description": "TLS/SSL certificate inspection" },
-    { "name": "WHOIS", "description": "Domain registration data (RDAP + port-43 fallback)" },
-    { "name": "Subdomains", "description": "Subdomain discovery via Certificate Transparency logs with DNS bruteforce fallback" },
+    { "name": "DNS", "description": "DNS record lookups (A, AAAA, MX, TXT, NS, CAA, SOA)" },
+    { "name": "SSL", "description": "TLS/SSL certificate inspection via live handshake" },
+    { "name": "WHOIS", "description": "Domain registration data via 4-tier fallback chain (rdap.org -> IANA bootstrap -> 22 hardcoded RDAP servers -> port-43 socket WHOIS for 50+ TLDs)" },
+    { "name": "Subdomains", "description": "Subdomain discovery via 5 parallel sources (crt.sh, certspotter, hackertarget, AlienVault OTX, VirusTotal) plus always-on DNS bruteforce" },
     { "name": "Email Security", "description": "SPF, DMARC, and DKIM (auto-discovered via ~29 common selectors)" },
     { "name": "Demo", "description": "Public rate-limited demo endpoint" },
     { "name": "Utility", "description": "Service utilities" }
@@ -43,7 +43,7 @@
     "/lookup/{domain}": {
       "get": {
         "summary": "Full Domain Intelligence Lookup",
-        "description": "Aggregate endpoint: returns DNS, SSL, WHOIS, subdomains, and email security in one parallel call. Most popular endpoint.",
+        "description": "Aggregate endpoint: returns DNS, SSL, WHOIS, subdomains, and email security in one parallel call. Most popular endpoint. Sub-lookups run concurrently via asyncio.gather; total wall time bounded by the slowest source (~1-5s uncached, ~50ms cached).",
         "operationId": "lookup_lookup__domain__get",
         "tags": ["Aggregate"],
         "parameters": [
@@ -58,7 +58,7 @@
     "/domain/{domain}/dns": {
       "get": {
         "summary": "DNS Records",
-        "description": "Returns A, AAAA, MX, TXT, NS, CNAME, and SOA records for the given domain.",
+        "description": "Returns A, AAAA, MX, TXT, NS, CAA, and SOA records for the given domain. All record types resolved in parallel via the standard async resolver; per-record timeout ~5s.",
         "operationId": "dns_only_domain__domain__dns_get",
         "tags": ["DNS"],
         "parameters": [
@@ -73,7 +73,7 @@
     "/domain/{domain}/ssl": {
       "get": {
         "summary": "SSL/TLS Certificate Details",
-        "description": "Performs a live TLS handshake against the host and returns issuer, subject, validity window, SAN list, and key strength. No third-party scanner.",
+        "description": "Performs a live TLS handshake against the host (5s socket timeout) and returns issuer, subject, validity window, SAN list, days-until-expiry, signature algorithm, and key info. No third-party scanner.",
         "operationId": "ssl_only_domain__domain__ssl_get",
         "tags": ["SSL"],
         "parameters": [
@@ -88,7 +88,7 @@
     "/domain/{domain}/whois": {
       "get": {
         "summary": "WHOIS / RDAP Registration Data",
-        "description": "Registration data via the RDAP protocol (rdap.org, then IANA bootstrap), with a port-43 WHOIS fallback if RDAP is unavailable. Response includes a _source field indicating which method returned the data.",
+        "description": "Registration data via a 4-tier fallback chain: (1) rdap.org universal redirect, (2) IANA RDAP bootstrap -> authoritative TLD-specific RDAP server, (3) hardcoded RDAP base URLs for 22 common TLDs, (4) port-43 socket WHOIS with 50+ TLD-specific servers (all gTLDs plus 35+ ccTLDs incl. .fr, .nl, .au, .ca, .jp, .ru, .cn, .br, .es, .it, .ch, .at, .pl, .se, .no, .fi, .dk, .be, .ie, .nz, .za, .in, .kr, .sg, and more), with IANA referral lookup for any TLD not pre-mapped. Response includes a _source field indicating which tier succeeded (e.g. 'rdap.org', 'iana-bootstrap:...', 'fallback:...', 'port43:whois.verisign-grs.com').",
         "operationId": "whois_only_domain__domain__whois_get",
         "tags": ["WHOIS"],
         "parameters": [
@@ -103,7 +103,7 @@
     "/domain/{domain}/subdomains": {
       "get": {
         "summary": "Subdomain Enumeration",
-        "description": "Enumerates subdomains by querying Certificate Transparency log sources (crt.sh, certspotter, hackertarget) concurrently, with a DNS bruteforce wordlist fallback if all CT sources fail. Whatever succeeded is returned, with a warnings[] field naming what didn't.",
+        "description": "Enumerates subdomains via 5 parallel upstream sources (crt.sh, certspotter, hackertarget, AlienVault OTX, VirusTotal v3) PLUS an always-on DNS bruteforce against a curated 686-word wordlist via public resolvers (1.1.1.1, 8.8.8.8, 9.9.9.9). The bruteforce runs every time alongside upstream sources — not just as fallback — so the response is never empty regardless of upstream status. Results are merged, deduplicated, and sorted. The sources_used array reports per-source status. The warnings field is coverage-aware: only populated when total found drops below 20 subdomains. Up to 1,000 results returned per request.",
         "operationId": "subs_only_domain__domain__subdomains_get",
         "tags": ["Subdomains"],
         "parameters": [
@@ -118,7 +118,7 @@
     "/domain/{domain}/email-security": {
       "get": {
         "summary": "Email Security Posture",
-        "description": "Returns SPF, DMARC, and DKIM posture (presence + records). DKIM keys are auto-discovered by probing ~29 common selectors used by major mail providers (Google Workspace, Microsoft 365, Mailchimp, SendGrid, Postmark, Mandrill, etc.) plus generic catchalls. Custom or hash-based selectors (e.g. Amazon SES) aren't auto-discoverable.",
+        "description": "Returns SPF, DMARC, and DKIM posture (presence + records). DKIM keys are auto-discovered by probing ~29 common selectors used by major mail providers (Google Workspace, Microsoft 365, Mailchimp, SendGrid, Postmark, Mandrill, Klaviyo, Mailgun, etc.) plus generic catchalls. Custom or hash-based selectors (e.g. Amazon SES) aren't auto-discoverable.",
         "operationId": "email_only_domain__domain__email_security_get",
         "tags": ["Email Security"],
         "parameters": [
