@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,shrink-to-fit=no">
+<meta name="theme-color" content="#15181d">
+<title>{{ domain }} — DNS, WHOIS, SSL, Subdomains, Email Security Report | OTI Labs</title>
+<meta name="description" content="{{ domain }}: {{ stats.dns_types }} DNS record types, {{ stats.sub_count }} subdomains via CT logs{% if stats.ssl_days is not none %}, SSL valid {{ stats.ssl_days }}d{% endif %}, plus SPF/DMARC/DKIM email auth. Live intel, no signup.">
+<meta name="author" content="Osiris Technical Institute">
+<link rel="canonical" href="https://oti-labs.com/report/{{ domain }}">
+<meta property="og:title" content="{{ domain }} — Domain Intelligence Report">
+<meta property="og:description" content="{{ domain }}: {{ stats.dns_types }} DNS record types, {{ stats.sub_count }} subdomains via CT logs{% if stats.ssl_days is not none %}, SSL valid {{ stats.ssl_days }}d{% endif %}, plus SPF/DMARC/DKIM email auth.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://oti-labs.com/report/{{ domain }}">
+<meta property="og:image" content="https://oti-labs.com/og-banner.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="628">
+<meta property="og:site_name" content="Osiris Technical Institute">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{{ domain }} — Domain Intelligence Report">
+<meta name="twitter:description" content="{{ domain }}: {{ stats.dns_types }} DNS records, {{ stats.sub_count }} subdomains{% if stats.ssl_days is not none %}, SSL {{ stats.ssl_days }}d{% endif %}, plus SPF/DMARC/DKIM email auth.">
+<meta name="twitter:image" content="https://oti-labs.com/og-banner.png">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Dataset",
+  "name": "{{ domain }} — Domain Intelligence Report",
+  "description": "DNS, WHOIS, SSL, subdomain enumeration, and email security data for {{ domain }}.",
+  "url": "https://oti-labs.com/report/{{ domain }}",
+  "creator": {"@type": "Organization", "name": "Osiris Technical Institute", "url": "https://oti-labs.com"},
+  "license": "https://opensource.org/licenses/MIT",
+  "datePublished": "{{ generated_at_iso }}",
+  "dateModified": "{{ generated_at_iso }}"
+}
+</script>
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+<link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png">
+<link rel="icon" type="image/png" sizes="480x480" href="/favicon-480.png">
+<link rel="apple-touch-icon" href="/favicon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#15181d;--bg-2:#1b2027;--bg-3:#232a34;
+  --surface:rgba(255,255,255,0.03);--surface-2:rgba(255,255,255,0.05);
+  --border:rgba(148,163,184,0.12);--border-2:rgba(148,163,184,0.2);
+  --txt:#e2e8f0;--txt-2:#94a3b8;--txt-3:#64748b;--txt-h:#f8fafc;
+  --accent:#34d399;--accent-2:#10b981;--accent-soft:rgba(52,211,153,0.12);
+  --danger:#f87171;--warn:#fbbf24;--info:#60a5fa;
+  --radius:14px;--radius-lg:20px;--radius-sm:8px;
+  --shadow-lg:0 24px 60px rgba(0,0,0,0.55);
+  --ease:cubic-bezier(0.16,1,0.3,1);
+  --ease-out:cubic-bezier(0.22,1,0.36,1);
+}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{background:var(--bg);color:var(--txt);font-family:"Inter",system-ui,-apple-system,sans-serif;line-height:1.6;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;overflow-x:hidden;background-image:radial-gradient(ellipse 85% 55% at 50% -20%,rgba(52,211,153,0.12),transparent 70%),radial-gradient(ellipse 60% 50% at 85% 35%,rgba(96,165,250,0.045),transparent 60%);background-attachment:fixed}
+a{color:var(--accent);text-decoration:none;transition:color 0.2s var(--ease)}
+a:hover{color:var(--accent-2)}
+code,pre,kbd{font-family:"JetBrains Mono",ui-monospace,monospace}
+h1,h2,h3,h4{font-family:"Space Grotesk","Inter",sans-serif;color:var(--txt-h);letter-spacing:-0.02em;line-height:1.15;font-weight:700}
+.container{max-width:1180px;margin:0 auto;padding:0 28px}
+::selection{background:var(--accent-soft);color:var(--txt-h)}
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.6}}
+nav{position:sticky;top:0;z-index:100;padding:12px 0;isolation:isolate}
+nav::before{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(21,24,29,0.78) 0%,rgba(21,24,29,0.56) 100%);backdrop-filter:saturate(180%) blur(24px);-webkit-backdrop-filter:saturate(180%) blur(24px);z-index:-2;border-bottom:1px solid rgba(148,163,184,0.06);box-shadow:0 4px 32px rgba(0,0,0,0.3),inset 0 1px 0 rgba(255,255,255,0.04)}
+nav::after{content:"";position:absolute;left:0;right:0;bottom:0;height:1px;background:linear-gradient(90deg,transparent 0%,rgba(52,211,153,0.35) 22%,rgba(96,165,250,0.28) 50%,rgba(52,211,153,0.35) 78%,transparent 100%);opacity:0.75;pointer-events:none;z-index:-1}
+.nav-inner{display:flex;align-items:center;justify-content:space-between;gap:24px;position:relative}
+.logo{display:flex;align-items:center;gap:12px;font-weight:700;color:var(--txt-h);font-family:"Space Grotesk",sans-serif;font-size:1.05rem;letter-spacing:-0.02em;transition:color 0.3s var(--ease)}
+.logo:hover{color:var(--accent-2)}
+.logo img{transition:transform 0.4s var(--ease),filter 0.4s var(--ease);border-radius:10px}
+.logo-txt{display:flex;flex-direction:column;line-height:1.1}
+.logo-sub{font-size:0.65rem;color:var(--txt-3);font-weight:500;letter-spacing:0.08em;text-transform:uppercase;font-family:"Inter",sans-serif;margin-top:3px;opacity:0.92}
+.nav-cta{display:flex;gap:10px;align-items:center}
+.nav-toggle{display:none;background:transparent;border:1px solid var(--border-2);border-radius:10px;width:42px;height:42px;align-items:center;justify-content:center;cursor:pointer;color:var(--txt-h);padding:0;flex-shrink:0;transition:all 0.2s var(--ease)}
+.nav-toggle:hover{border-color:var(--accent);color:var(--accent)}
+.nav-toggle svg{width:22px;height:22px;display:block}
+.nav-collapse{display:flex;gap:24px;align-items:center}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:11px 20px;border-radius:10px;font-weight:600;font-size:0.92rem;font-family:inherit;cursor:pointer;border:1px solid transparent;transition:all 0.2s var(--ease);white-space:nowrap}
+.btn-p{background:linear-gradient(135deg,var(--accent) 0%,var(--accent-2) 100%);color:#04111a;box-shadow:0 4px 14px rgba(52,211,153,0.25),inset 0 1px 0 rgba(255,255,255,0.2)}
+.btn-p:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(52,211,153,0.4);color:#04111a}
+.btn-s{background:var(--surface-2);color:var(--txt-h);border-color:var(--border-2)}
+.btn-s:hover{background:rgba(255,255,255,0.08);border-color:rgba(148,163,184,0.35)}
+.btn-g{background:transparent;color:var(--txt-2);border-color:var(--border-2)}
+.btn-g:hover{color:var(--txt-h);border-color:var(--accent);background:var(--accent-soft)}
+.btn-sm{padding:8px 14px;font-size:0.85rem}
+.btn-lg{padding:14px 28px;font-size:1rem}
+.hero{padding:80px 0 60px;position:relative}
+.hero-eyebrow{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;background:var(--accent-soft);border:1px solid rgba(52,211,153,0.25);border-radius:999px;font-size:0.8rem;color:var(--accent);font-weight:600;margin-bottom:24px;animation:fadeUp 0.6s var(--ease-out)}
+.hero-eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent);animation:pulse 2s infinite}
+.hero h1{font-size:clamp(2rem,5vw,3.6rem);font-weight:700;line-height:1.05;letter-spacing:-0.025em;color:var(--txt-h);margin-bottom:18px;max-width:880px;animation:fadeUp 0.7s var(--ease-out) 0.05s both;font-family:"JetBrains Mono",monospace;word-break:break-all}
+.hero h1 .grad{background:linear-gradient(135deg,var(--accent) 0%,#06b6d4 60%,#60a5fa 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.hero-sub{font-size:1.15rem;color:var(--txt-2);max-width:680px;margin-bottom:36px;line-height:1.55;animation:fadeUp 0.7s var(--ease-out) 0.15s both}
+.hero-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;margin-top:8px;background:var(--border);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;animation:fadeUp 0.8s var(--ease-out) 0.25s both}
+.hstat{padding:24px 28px;background:var(--bg-2)}
+.hstat-v{font-family:"Space Grotesk",sans-serif;font-size:1.85rem;font-weight:700;color:var(--txt-h);letter-spacing:-0.02em;line-height:1}
+.hstat-v.ok{color:var(--accent)}
+.hstat-v.warn{color:var(--warn)}
+.hstat-v.danger{color:var(--danger)}
+.hstat-v.muted{color:var(--txt-3)}
+.hstat-l{font-size:0.82rem;color:var(--txt-3);margin-top:8px;font-weight:500}
+.report-meta{display:flex;align-items:center;gap:14px;margin-top:18px;color:var(--txt-3);font-size:0.82rem;flex-wrap:wrap}
+.rm-generated{opacity:0.85}
+.rm-refresh{display:inline-flex;align-items:center;gap:6px;color:var(--txt-2);padding:5px 11px;background:var(--surface);border:1px solid var(--border);border-radius:8px;transition:color 0.2s var(--ease),background 0.2s var(--ease),border-color 0.2s var(--ease);font-weight:500;text-decoration:none}
+.rm-refresh:hover{color:var(--accent);border-color:rgba(52,211,153,0.4);background:var(--accent-soft)}
+.rm-refresh svg{color:var(--accent);flex-shrink:0;transition:transform 0.4s var(--ease)}
+.rm-refresh:hover svg{transform:rotate(180deg)}
+.rm-refresh.done{color:var(--accent);border-color:rgba(52,211,153,0.4);background:var(--accent-soft);pointer-events:none}
+.rm-refresh.done svg{transform:rotate(360deg)}
+section{position:relative}
+.dsec{padding:72px 0;border-top:1px solid var(--border)}
+.slabel{display:inline-block;font-size:0.8rem;color:var(--accent);font-weight:600;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:14px}
+.stitle{font-size:clamp(1.6rem,3.2vw,2.2rem);font-weight:700;color:var(--txt-h);letter-spacing:-0.025em;line-height:1.15;margin-bottom:14px;max-width:680px}
+.ssub{font-size:1rem;color:var(--txt-2);max-width:640px;margin-bottom:36px;line-height:1.55}
+.card{padding:22px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:14px}
+.card-h{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.card-title{font-family:"JetBrains Mono",monospace;font-size:0.95rem;color:var(--accent);font-weight:600}
+.card-meta{font-size:0.78rem;color:var(--txt-3);font-family:"JetBrains Mono",monospace}
+.records{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
+.kv{display:grid;grid-template-columns:140px 1fr;gap:10px 18px;font-size:0.92rem}
+.kv .k{color:var(--txt-3);font-weight:500;padding-top:2px}
+.kv .v{color:var(--txt);font-family:"JetBrains Mono",monospace;word-break:break-all;line-height:1.55}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;font-family:"JetBrains Mono",monospace;font-size:0.78rem;color:var(--txt-2);margin:2px 4px 2px 0;white-space:nowrap}
+.chip.accent{background:var(--accent-soft);border-color:rgba(52,211,153,0.25);color:var(--accent)}
+.chip.warn{background:rgba(251,191,36,0.1);border-color:rgba(251,191,36,0.25);color:var(--warn)}
+.chip.danger{background:rgba(248,113,113,0.1);border-color:rgba(248,113,113,0.25);color:var(--danger)}
+.chip.muted{background:transparent;color:var(--txt-3);border-color:var(--border)}
+.mono-list{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px;font-family:"JetBrains Mono",monospace;font-size:0.83rem;line-height:1.7;color:var(--txt);max-height:340px;overflow-y:auto;overflow-x:auto;list-style:none}
+.mono-list li{padding:1px 0;word-break:break-all}
+.warning-bar{padding:14px 18px;background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.25);border-radius:10px;color:var(--warn);font-size:0.88rem;margin-bottom:18px;font-family:"JetBrains Mono",monospace}
+.error-card{padding:22px;background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.2);border-radius:var(--radius);color:var(--txt-2);font-size:0.9rem;font-family:"JetBrains Mono",monospace}
+.cta-sec{padding:90px 0;border-top:1px solid var(--border);text-align:center}
+.cta-card{max-width:760px;margin:0 auto;padding:60px 40px;background:linear-gradient(135deg,rgba(52,211,153,0.08) 0%,rgba(96,165,250,0.04) 100%);border:1px solid rgba(52,211,153,0.2);border-radius:var(--radius-lg);position:relative;overflow:hidden}
+.cta-card h2{font-size:clamp(1.8rem,3.5vw,2.4rem);margin-bottom:14px}
+.cta-card p{color:var(--txt-2);font-size:1.05rem;margin-bottom:28px}
+.rel-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-top:20px}
+.rel-card{padding:16px 18px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);transition:all 0.25s var(--ease);display:flex;align-items:center;gap:12px;color:var(--txt)}
+.rel-card:hover{border-color:var(--accent);background:var(--surface-2);transform:translateY(-1px);color:var(--txt-h)}
+.rel-domain{font-family:"JetBrains Mono",monospace;font-size:0.92rem;font-weight:500;flex:1;word-break:break-all}
+.rel-arrow{color:var(--txt-3);transition:color 0.2s var(--ease);flex-shrink:0}
+.rel-card:hover .rel-arrow{color:var(--accent)}
+footer{position:relative;padding:60px 0 36px;color:var(--txt-3);overflow:hidden;border-top:1px solid rgba(148,163,184,0.08)}
+footer::before{content:"";position:absolute;inset:0;background:radial-gradient(ellipse 90% 60% at 50% 0%,rgba(52,211,153,0.055) 0%,transparent 58%),linear-gradient(180deg,rgba(10,20,38,0.35) 0%,transparent 45%);pointer-events:none;z-index:0}
+footer .container{position:relative;z-index:1}
+.footer-grid{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:40px 32px;margin-bottom:36px}
+.foot-brand{font-family:"Space Grotesk",sans-serif;font-weight:700;color:var(--txt-h);font-size:1.05rem;margin-bottom:10px;letter-spacing:-0.02em}
+.foot-product{display:block;font-size:0.72rem;font-weight:600;color:var(--accent);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:10px;font-family:"Inter",sans-serif;opacity:0.95}
+.foot-tag{font-size:0.88rem;color:var(--txt-2);max-width:340px;line-height:1.6;opacity:0.95;margin:0}
+.foot-h{font-size:0.72rem;font-weight:600;color:var(--txt-h);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.foot-h::before{content:"";width:6px;height:6px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#22d3ee);box-shadow:0 0 12px rgba(52,211,153,0.35);flex-shrink:0}
+.foot-l{display:block;color:var(--txt-2);font-size:0.875rem;padding:8px 12px 8px 10px;margin-left:-10px;border-left:2px solid transparent;border-radius:0 10px 10px 0;transition:color 0.25s var(--ease),transform 0.3s var(--ease),background 0.25s var(--ease),border-color 0.25s var(--ease)}
+.foot-l:hover{color:var(--txt-h);transform:translateX(4px);background:rgba(255,255,255,0.035);border-left-color:rgba(52,211,153,0.55)}
+.foot-bot{padding-top:28px;border-top:1px solid rgba(148,163,184,0.1);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px;font-size:0.82rem;color:var(--txt-3)}
+.foot-bot span{opacity:0.9}
+@media (max-width:1024px){
+  .nav-toggle{display:inline-flex}
+  .nav-inner{flex-wrap:nowrap}
+  .nav-collapse{display:none;position:absolute;left:14px;right:14px;top:calc(100% + 10px);background:var(--bg-2);border:1px solid var(--border-2);border-radius:14px;padding:14px;flex-direction:column;align-items:stretch;gap:8px;box-shadow:0 16px 40px rgba(0,0,0,0.55);z-index:10}
+  .nav-collapse.open{display:flex;animation:fadeUp 0.22s var(--ease-out)}
+  .nav-collapse .nav-links{display:flex;flex-direction:column;align-items:stretch;gap:4px;width:100%}
+  .nav-collapse .nav-links a{padding:11px 14px;border-radius:10px;display:block;font-size:0.95rem}
+  .nav-collapse .nav-cta{display:flex;flex-direction:column;align-items:stretch;gap:8px;width:100%;border-top:1px solid var(--border);padding-top:10px;margin-top:4px}
+  .nav-collapse .nav-cta .btn{width:100%;justify-content:center;font-size:0.92rem;padding:11px 16px}
+  .hero{padding:60px 0 40px}
+  .hero-stats{grid-template-columns:repeat(2,1fr)}
+  .records{grid-template-columns:1fr}
+  .kv{grid-template-columns:1fr;gap:6px}
+  .footer-grid{grid-template-columns:1fr 1fr;gap:28px}
+  .cta-card{padding:40px 24px}
+  body{background-attachment:scroll}
+}
+@media (max-width:520px){
+  .container{padding:0 18px}
+  nav{padding:10px 0}
+  .logo{font-size:1rem;gap:10px}
+  .btn-sm{padding:9px 10px;font-size:0.82rem}
+  .hero{padding:48px 0 36px}
+  .hero-sub{font-size:1.02rem}
+  .hstat{padding:18px 18px}
+  .hstat-v{font-size:1.6rem}
+  .footer-grid{grid-template-columns:1fr;gap:24px}
+}
+@media (prefers-reduced-motion:reduce){
+  .logo img,.foot-l{transition:none!important}
+  .logo:hover img{transform:none;filter:none}
+  .foot-l:hover{transform:none}
+  .hero-eyebrow,.hero h1,.hero-sub,.hero-stats{animation:none!important}
+}
+.api-cta{padding:24px 26px;background:linear-gradient(135deg,rgba(52,211,153,0.08) 0%,rgba(96,165,250,0.04) 100%);border:1px solid rgba(52,211,153,0.28);border-radius:var(--radius-lg);box-shadow:0 8px 32px rgba(0,0,0,0.25),0 0 0 1px rgba(52,211,153,0.05)}
+.lookup-another{margin:32px auto 0;max-width:680px;padding:14px 16px;background:var(--bg-2);border:1px solid var(--border-2);border-radius:14px;display:flex;align-items:center;gap:10px;transition:border-color 0.2s var(--ease),box-shadow 0.2s var(--ease)}
+.lookup-another:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.lookup-another-lbl{font-size:0.85rem;color:var(--txt-2);font-weight:500;white-space:nowrap;padding-left:6px;flex-shrink:0}
+.lookup-another-in{flex:1;min-width:0;background:transparent;border:none;color:var(--txt-h);padding:9px 6px;font-family:"JetBrains Mono",monospace;font-size:0.92rem;outline:none}
+.lookup-another-in::placeholder{color:var(--txt-3)}
+.lookup-another-btn{flex-shrink:0;padding:9px 16px;border-radius:9px;background:linear-gradient(135deg,var(--accent) 0%,var(--accent-2) 100%);color:#04111a;font-weight:600;font-size:0.85rem;border:none;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px;transition:transform 0.15s var(--ease),box-shadow 0.15s var(--ease)}
+.lookup-another-btn:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(52,211,153,0.35)}
+.lookup-another-err{display:none;font-size:0.82rem;color:var(--danger);margin-top:8px;padding-left:6px}
+.lookup-another-err.on{display:block}
+.lookup-another-wrap{margin:0 auto;max-width:680px}
+.popular-other{margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:0.82rem;color:var(--txt-3);max-width:680px;margin-left:auto;margin-right:auto;padding:0 6px}
+.popular-other-lbl{margin-right:4px}
+.popular-other a{display:inline-flex;align-items:center;padding:4px 10px;background:var(--surface);border:1px solid var(--border);border-radius:999px;color:var(--txt-2);font-family:"JetBrains Mono",monospace;font-size:0.78rem;text-decoration:none;transition:all 0.15s var(--ease)}
+.popular-other a:hover{color:var(--accent);border-color:rgba(52,211,153,0.3);background:var(--surface-2)}
+@media (max-width:520px){
+  .lookup-another{flex-wrap:wrap}
+  .lookup-another-lbl{width:100%;padding:0 0 4px 6px}
+  .lookup-another-in{flex:1;min-width:0}
+  .lookup-another-btn{padding:9px 12px}
+}
+.api-cta-row{display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap}
+.api-cta-txt{flex:1;min-width:260px}
+.api-cta-title{font-family:"Space Grotesk",sans-serif;font-weight:700;color:var(--txt-h);font-size:1.1rem;margin-bottom:6px;letter-spacing:-0.01em}
+.api-cta-sub{color:var(--txt-2);font-size:0.93rem;line-height:1.5}
+.api-cta-code{margin-top:18px;background:var(--bg);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.api-cta-tabs{display:flex;align-items:center;gap:2px;padding:0 8px;background:rgba(0,0,0,0.25);border-bottom:1px solid var(--border);overflow-x:auto}
+.api-cta-tab{padding:11px 14px;color:var(--txt-3);font-size:0.82rem;font-weight:500;cursor:pointer;border:none;background:transparent;font-family:inherit;border-bottom:2px solid transparent;transition:all 0.2s var(--ease);white-space:nowrap;margin-bottom:-1px}
+.api-cta-tab.on{color:var(--txt-h);border-bottom-color:var(--accent)}
+.api-cta-tab:hover{color:var(--txt-h)}
+.api-cta-copy{margin-left:auto;padding:5px 10px;font-size:0.74rem;color:var(--txt-3);background:transparent;border:1px solid var(--border-2);border-radius:6px;cursor:pointer;font-family:inherit;transition:all 0.15s var(--ease);flex-shrink:0}
+.api-cta-copy:hover{color:var(--txt-h);border-color:var(--accent)}
+.api-cta-pane{display:none;font-family:"JetBrains Mono",monospace;font-size:0.83rem;color:var(--txt);line-height:1.65;margin:0;padding:14px 16px;overflow-x:auto;white-space:pre;background:transparent}
+.api-cta-pane.on{display:block}
+.api-cta-uses{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:16px;padding-top:14px;border-top:1px solid rgba(148,163,184,0.1)}
+.api-cta-uses-lbl{font-size:0.78rem;color:var(--txt-3);font-weight:600;text-transform:uppercase;letter-spacing:0.06em;margin-right:4px}
+.api-cta-use-chip{display:inline-flex;align-items:center;padding:4px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;font-size:0.8rem;color:var(--txt-2);font-weight:500;transition:all 0.2s var(--ease)}
+.api-cta-use-chip:hover{color:var(--accent);border-color:rgba(52,211,153,0.3);background:var(--accent-soft)}
+.api-cta-foot{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:14px;padding:12px 16px;background:rgba(0,0,0,0.18);border:1px solid var(--border);border-radius:10px;flex-wrap:wrap}
+.api-cta-foot-tier{font-size:0.85rem;color:var(--txt-2)}
+.api-cta-foot-tier strong{color:var(--accent);font-weight:600}
+.api-cta-foot-link{font-size:0.85rem;color:var(--accent);font-weight:600;white-space:nowrap}
+.api-cta-foot-link:hover{color:var(--accent-2)}
+.nav-links{display:flex;gap:8px;align-items:center}
+.nav-links a{position:relative;color:var(--txt-2);font-size:0.875rem;font-weight:500;padding:8px 12px;border-radius:10px;transition:color 0.25s var(--ease),background 0.25s var(--ease)}
+.nav-links a:hover{color:var(--txt-h);background:rgba(255,255,255,0.04)}
+@media (max-width:880px){.nav-collapse .nav-links a::after{display:none}}
+.sticky-cta{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:90;max-width:calc(100vw - 28px);animation:fadeUp 0.5s var(--ease-out) 0.6s both}
+.sticky-cta-inner{display:flex;align-items:center;gap:14px;padding:9px 9px 9px 18px;background:rgba(21,24,29,0.92);backdrop-filter:saturate(180%) blur(20px);-webkit-backdrop-filter:saturate(180%) blur(20px);border:1px solid rgba(52,211,153,0.32);border-radius:999px;box-shadow:0 12px 40px rgba(0,0,0,0.55),0 0 0 1px rgba(52,211,153,0.08)}
+.sticky-cta-txt{color:var(--txt);font-size:0.86rem;font-weight:500;white-space:nowrap}
+.sticky-cta-x{background:transparent;border:none;color:var(--txt-3);font-size:1.3rem;cursor:pointer;padding:0 8px;line-height:1;transition:color 0.15s}
+.sticky-cta-x:hover{color:var(--txt-h)}
+@media (max-width:580px){
+  .sticky-cta{bottom:12px;max-width:calc(100vw - 16px)}
+  .sticky-cta-inner{flex-wrap:wrap;justify-content:center;border-radius:14px;padding:12px 12px 12px 16px}
+  .sticky-cta-txt{font-size:0.78rem;white-space:normal;line-height:1.3;text-align:center;flex:1 1 100%}
+  .sticky-cta-x{position:absolute;top:6px;right:8px}
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="container nav-inner">
+    <a href="/domain-intelligence-api" class="logo">
+      <img src="/domainintel_logo.png" alt="Domain Intelligence" style="height:34px;border-radius:9px">
+      <div class="logo-txt">
+        <span>Domain Intelligence</span>
+        <span class="logo-sub">by Osiris Technical Institute</span>
+      </div>
+    </a>
+    <button class="nav-toggle" id="navToggle" aria-label="Open menu" aria-expanded="false" aria-controls="navCollapse">
+      <svg class="ic-burger" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+      <svg class="ic-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+    <div class="nav-collapse" id="navCollapse">
+      <div class="nav-links">
+        <a href="/domain-intelligence-api">Overview</a>
+        <a href="/lookup">Lookup</a>
+        <a href="/whois-api">WHOIS</a>
+        <a href="/dns-lookup-api">DNS</a>
+        <a href="/ssl-certificate-api">SSL</a>
+        <a href="/subdomain-enumeration-api">Subdomains</a>
+        <a href="/email-security-api">Email</a>
+        <a href="/reports">Reports</a>
+      </div>
+      <div class="nav-cta">
+        <a href="https://github.com/osiris-technical-institute/domain-intelligence-api" class="btn btn-g btn-sm" target="_blank" rel="noopener">GitHub</a>
+        <a href="/domain-intelligence-api#pricing" class="btn btn-p btn-sm">Get API Key</a>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="container">
+    <div class="hero-eyebrow"><span class="dot"></span>Domain Intelligence Report</div>
+    <h1><span class="grad">{{ domain }}</span></h1>
+    <p class="hero-sub">DNS records, WHOIS/RDAP registration, SSL certificate, subdomain enumeration, and email-security posture &mdash; aggregated in real time and cached.</p>
+    <div class="hero-stats">
+      <div class="hstat">
+        <div class="hstat-v {{ 'ok' if stats.dns_types else 'muted' }}">{{ stats.dns_types }}</div>
+        <div class="hstat-l">DNS record type{{ 's' if stats.dns_types != 1 else '' }}</div>
+      </div>
+      <div class="hstat">
+        <div class="hstat-v {{ stats.ssl_class }}">{% if stats.ssl_days is not none %}{{ stats.ssl_days }}d{% else %}—{% endif %}</div>
+        <div class="hstat-l">{% if stats.ssl_days is not none %}SSL cert remaining{% else %}SSL unavailable{% endif %}</div>
+      </div>
+      <div class="hstat">
+        <div class="hstat-v {{ 'ok' if stats.sub_count else 'muted' }}">{{ stats.sub_count }}</div>
+        <div class="hstat-l">Subdomain{{ 's' if stats.sub_count != 1 else '' }} found</div>
+      </div>
+      <div class="hstat">
+        <div class="hstat-v {{ 'ok' if stats.email_count >= 2 else ('warn' if stats.email_count == 1 else 'muted') }}">{{ stats.email_label }}</div>
+        <div class="hstat-l">Email security signals</div>
+      </div>
+    </div>
+    <div class="report-meta">
+      <span class="rm-generated">Generated {{ generated_at }}</span>
+      <a href="?refresh=1" class="rm-refresh" id="rmRefresh" title="Re-fetch all data from upstream sources (max 3/day per IP)" aria-label="Refresh data">
+        <svg viewBox="0 0 16 16" fill="currentColor" width="13" height="13" aria-hidden="true"><path d="M8 3a5 5 0 11-3.54 1.46.75.75 0 011.06 1.06A3.5 3.5 0 1011.5 8H10a.75.75 0 010-1.5h3a.75.75 0 01.75.75v3a.75.75 0 01-1.5 0V8.6A5 5 0 018 3z"/></svg>
+        <span class="rm-refresh-label">Refresh data</span>
+      </a>
+    </div>
+  </div>
+</section>
+
+<section style="padding:24px 0 0">
+  <div class="container">
+    <div class="lookup-another-wrap">
+      <form class="lookup-another" id="lookupAnother" autocomplete="off" novalidate>
+        <span class="lookup-another-lbl">Look up another:</span>
+        <input class="lookup-another-in" id="lookupAnotherIn" type="text" name="domain" placeholder="example.com" spellcheck="false" autocapitalize="none" autocorrect="off" aria-label="Domain name to look up">
+        <button class="lookup-another-btn" type="submit" aria-label="Look up this domain">
+          Go
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+        </button>
+      </form>
+      <div class="lookup-another-err" id="lookupAnotherErr">Please enter a valid domain.</div>
+      <div class="popular-other">
+        <span class="popular-other-lbl">Or try:</span>
+        <a href="/report/cloudflare.com">cloudflare.com</a>
+        <a href="/report/github.com">github.com</a>
+        <a href="/report/stripe.com">stripe.com</a>
+        <a href="/report/openai.com">openai.com</a>
+        <a href="/lookup">Full lookup tool &rarr;</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section style="padding:36px 0 0">
+  <div class="container">
+    <div class="api-cta">
+      <div class="api-cta-row">
+        <div class="api-cta-txt">
+          <div class="api-cta-title">Put this data into your code &mdash; for any domain, any workflow</div>
+          <div class="api-cta-sub">Same DNS, WHOIS, SSL, subdomain &amp; email-security data via REST API &mdash; every field above as structured JSON. Drop it into monitoring scripts, CRM enrichment, security audits, fraud detection, or internal dashboards. Scales up to 5M requests/month.</div>
+        </div>
+        <a href="/domain-intelligence-api#pricing" class="btn btn-p">Get free API key &rarr;</a>
+      </div>
+      <div class="api-cta-uses">
+        <span class="api-cta-uses-lbl">Common uses:</span>
+        <span class="api-cta-use-chip">SSL expiry monitoring</span>
+        <span class="api-cta-use-chip">Subdomain change alerts</span>
+        <span class="api-cta-use-chip">CRM lead enrichment</span>
+        <span class="api-cta-use-chip">SPF/DMARC/DKIM audits</span>
+        <span class="api-cta-use-chip">Domain reputation scoring</span>
+        <span class="api-cta-use-chip">Attack surface mapping</span>
+        <span class="api-cta-use-chip">Bulk WHOIS lookup</span>
+        <span class="api-cta-use-chip">SaaS onboarding checks</span>
+      </div>
+      <div class="api-cta-code">
+        <div class="api-cta-tabs">
+          <button class="api-cta-tab on" type="button" data-t="curl">cURL</button>
+          <button class="api-cta-tab" type="button" data-t="py">Python</button>
+          <button class="api-cta-tab" type="button" data-t="node">Node.js</button>
+          <button class="api-cta-tab" type="button" data-t="php">PHP</button>
+          <button class="api-cta-copy" type="button">Copy</button>
+        </div>
+<pre class="api-cta-pane on" data-p="curl">curl "https://domain-intelligence-api.p.rapidapi.com/lookup/{{ domain }}" \
+  -H "X-RapidAPI-Host: domain-intelligence-api.p.rapidapi.com" \
+  -H "X-RapidAPI-Key: YOUR_RAPIDAPI_KEY"</pre>
+<pre class="api-cta-pane" data-p="py">import requests
+
+url = "https://domain-intelligence-api.p.rapidapi.com/lookup/{{ domain }}"
+headers = {
+    "X-RapidAPI-Host": "domain-intelligence-api.p.rapidapi.com",
+    "X-RapidAPI-Key": "YOUR_RAPIDAPI_KEY",
+}
+r = requests.get(url, headers=headers, timeout=15)
+data = r.json()
+print(data["subdomains"]["count"], "subdomains found")</pre>
+<pre class="api-cta-pane" data-p="node">// Node 18+ has built-in fetch — no import needed
+const res = await fetch(
+  "https://domain-intelligence-api.p.rapidapi.com/lookup/{{ domain }}",
+  { headers: {
+      "X-RapidAPI-Host": "domain-intelligence-api.p.rapidapi.com",
+      "X-RapidAPI-Key": "YOUR_RAPIDAPI_KEY",
+  }}
+);
+const data = await res.json();
+console.log(data.dns.A, data.email_security.spf);</pre>
+<pre class="api-cta-pane" data-p="php">&lt;?php
+$ch = curl_init("https://domain-intelligence-api.p.rapidapi.com/lookup/{{ domain }}");
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($ch, CURLOPT_HTTPHEADER, [
+    "X-RapidAPI-Host: domain-intelligence-api.p.rapidapi.com",
+    "X-RapidAPI-Key: YOUR_RAPIDAPI_KEY",
+]);
+$data = json_decode(curl_exec($ch), true);
+curl_close($ch);
+echo $data["subdomains"]["count"];</pre>
+      </div>
+      <div class="api-cta-foot">
+        <span class="api-cta-foot-tier"><strong>Free tier:</strong> 1,000 requests/month &middot; no credit card &middot; all endpoints included</span>
+        <a href="/domain-intelligence-api#pricing" class="api-cta-foot-link">See all plans &rarr;</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="dsec">
+  <div class="container">
+    <span class="slabel">DNS</span>
+    <h2 class="stitle">DNS Records</h2>
+    <p class="ssub">All record types resolved from authoritative DNS for {{ domain }}.</p>
+    {% if data.dns.error %}
+      <div class="error-card">Failed to fetch DNS records: {{ data.dns.error }}</div>
+    {% else %}
+      <div class="records">
+        {% for rtype, records in data.dns.items() %}
+          {% if records %}
+          <div class="card">
+            <div class="card-h">
+              <span class="card-title">{{ rtype }}</span>
+              <span class="card-meta">{{ records|length }} record{{ 's' if records|length != 1 else '' }}</span>
+            </div>
+            <ul class="mono-list">
+              {% for rec in records %}<li>{{ rec }}</li>{% endfor %}
+            </ul>
+          </div>
+          {% endif %}
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
+</section>
+
+<section class="dsec">
+  <div class="container">
+    <span class="slabel">Registration</span>
+    <h2 class="stitle">WHOIS / RDAP</h2>
+    <p class="ssub">Registration data for {{ domain }} via the RDAP protocol, with port-43 WHOIS fallback if RDAP is unavailable.</p>
+    {% if data.whois.error %}
+      <div class="error-card">Failed to fetch WHOIS: {{ data.whois.error }}</div>
+    {% else %}
+      <div class="card">
+        <div class="card-h">
+          <span class="card-title">whois</span>
+          {% if data.whois._source %}<span class="chip accent">via {{ data.whois._source }}</span>{% endif %}
+        </div>
+        <div class="kv">
+          {% if data.whois.registrar %}<div class="k">Registrar</div><div class="v">{{ data.whois.registrar }}</div>{% endif %}
+          {% if data.whois.created %}<div class="k">Created</div><div class="v">{{ data.whois.created }}</div>{% endif %}
+          {% if data.whois.updated %}<div class="k">Updated</div><div class="v">{{ data.whois.updated }}</div>{% endif %}
+          {% if data.whois.expires %}<div class="k">Expires</div><div class="v">{{ data.whois.expires }}</div>{% endif %}
+          {% if data.whois.handle %}<div class="k">Handle</div><div class="v">{{ data.whois.handle }}</div>{% endif %}
+          {% if data.whois.nameservers %}
+            <div class="k">Nameservers</div>
+            <div class="v">{% for ns in data.whois.nameservers %}<span class="chip">{{ ns }}</span>{% endfor %}</div>
+          {% endif %}
+          {% if data.whois.status %}
+            <div class="k">Status</div>
+            <div class="v">{% for s in data.whois.status %}<span class="chip muted">{{ s }}</span>{% endfor %}</div>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</section>
+
+<section class="dsec">
+  <div class="container">
+    <span class="slabel">TLS</span>
+    <h2 class="stitle">SSL Certificate</h2>
+    <p class="ssub">Live TLS handshake against {{ domain }}. No third-party scanner.</p>
+    {% if data.ssl.error %}
+      <div class="error-card">Failed to fetch SSL: {{ data.ssl.error }}</div>
+    {% else %}
+      <div class="card">
+        <div class="card-h">
+          <span class="card-title">ssl</span>
+          {% if stats.ssl_class == 'ok' %}<span class="chip accent">{{ data.ssl.days_until_expiry }} days remaining</span>
+          {% elif stats.ssl_class == 'warn' %}<span class="chip warn">{{ data.ssl.days_until_expiry }} days remaining — renew soon</span>
+          {% elif stats.ssl_class == 'danger' %}<span class="chip danger">{{ data.ssl.days_until_expiry }} days remaining — expiring</span>
+          {% endif %}
+        </div>
+        <div class="kv">
+          {% if data.ssl.issuer %}<div class="k">Issuer</div><div class="v">{{ data.ssl.issuer }}</div>{% endif %}
+          {% if data.ssl.subject %}<div class="k">Subject</div><div class="v">{{ data.ssl.subject }}</div>{% endif %}
+          {% if data.ssl.valid_from %}<div class="k">Valid from</div><div class="v">{{ data.ssl.valid_from }}</div>{% endif %}
+          {% if data.ssl.valid_to %}<div class="k">Valid to</div><div class="v">{{ data.ssl.valid_to }}</div>{% endif %}
+          {% if data.ssl.serial_number %}<div class="k">Serial</div><div class="v">{{ data.ssl.serial_number }}</div>{% endif %}
+          {% if data.ssl.sans %}
+            <div class="k">SANs ({{ data.ssl.sans|length }})</div>
+            <div class="v">{% for san in data.ssl.sans %}<span class="chip">{{ san }}</span>{% endfor %}</div>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</section>
+
+<section class="dsec">
+  <div class="container">
+    <span class="slabel">Reconnaissance</span>
+    <h2 class="stitle">Subdomains discovered</h2>
+    <p class="ssub">Aggregated from 5 upstream sources in parallel &mdash; crt.sh, certspotter, hackertarget, AlienVault OTX, and VirusTotal &mdash; plus an always-on DNS bruteforce across a curated 773-word wordlist with automatic wildcard filtering.</p>
+    {% if data.subdomains.error %}
+      <div class="error-card">Failed to enumerate subdomains: {{ data.subdomains.error }}</div>
+    {% else %}
+      {% if data.subdomains.warnings %}
+        <div class="warning-bar">⚠ Partial results — {{ data.subdomains.warnings|join(' · ') }}</div>
+      {% endif %}
+      <div class="card">
+        <div class="card-h">
+          <span class="card-title">subdomains</span>
+          <span class="card-meta">{{ data.subdomains.count }} found{% if data.subdomains.returned and data.subdomains.returned != data.subdomains.count %} ({{ data.subdomains.returned }} returned){% endif %}</span>
+        </div>
+        {% if data.subdomains.sources_used %}
+          <div style="margin-bottom:14px">
+            {% for src in data.subdomains.sources_used %}
+              {% if 'ok' in src %}<span class="chip accent">{{ src }}</span>
+              {% else %}<span class="chip danger">{{ src }}</span>
+              {% endif %}
+            {% endfor %}
+          </div>
+        {% endif %}
+        {% if data.subdomains.subdomains %}
+          <ul class="mono-list">
+            {% for sub in data.subdomains.subdomains %}<li>{{ sub }}</li>{% endfor %}
+          </ul>
+        {% else %}
+          <p style="color:var(--txt-3);font-size:0.9rem">No subdomains discovered.</p>
+        {% endif %}
+      </div>
+    {% endif %}
+  </div>
+</section>
+
+<section class="dsec">
+  <div class="container">
+    <span class="slabel">Email</span>
+    <h2 class="stitle">Email Security Posture</h2>
+    <p class="ssub">SPF and DMARC presence and records for {{ domain }}, plus DKIM keys auto-probed across 29 common selectors (Google Workspace, Microsoft 365, Mailchimp, SendGrid, Postmark and more).</p>
+    {% if data.email_security.error %}
+      <div class="error-card">Failed to fetch email security: {{ data.email_security.error }}</div>
+    {% else %}
+      <div class="records">
+        <div class="card">
+          <div class="card-h">
+            <span class="card-title">SPF</span>
+            {% if data.email_security.spf.present %}<span class="chip accent">present</span>{% else %}<span class="chip muted">missing</span>{% endif %}
+          </div>
+          {% if data.email_security.spf.records %}
+            <ul class="mono-list">{% for r in data.email_security.spf.records %}<li>{{ r }}</li>{% endfor %}</ul>
+          {% endif %}
+        </div>
+        <div class="card">
+          <div class="card-h">
+            <span class="card-title">DMARC</span>
+            {% if data.email_security.dmarc.present %}<span class="chip accent">present</span>{% else %}<span class="chip muted">missing</span>{% endif %}
+          </div>
+          {% if data.email_security.dmarc.records %}
+            <ul class="mono-list">{% for r in data.email_security.dmarc.records %}<li>{{ r }}</li>{% endfor %}</ul>
+          {% endif %}
+        </div>
+        <div class="card">
+          <div class="card-h">
+            <span class="card-title">DKIM</span>
+            {% if data.email_security.dkim.found %}<span class="chip accent">{{ data.email_security.dkim.found|length }} selector{{ 's' if data.email_security.dkim.found|length != 1 else '' }} found</span>
+            {% else %}<span class="chip muted">none via common selectors</span>{% endif %}
+          </div>
+          {% if data.email_security.dkim.records %}
+            {% for r in data.email_security.dkim.records %}
+            <div style="margin-top:14px">
+              <div style="font-family:'JetBrains Mono',monospace;font-size:0.82rem;color:var(--accent);margin-bottom:6px">{{ r.selector }}._domainkey.{{ domain }}</div>
+              <ul class="mono-list" style="max-height:160px">
+                {% for rec in r.records %}<li>{{ rec }}</li>{% endfor %}
+              </ul>
+            </div>
+            {% endfor %}
+          {% endif %}
+          <p style="color:var(--txt-3);font-size:0.78rem;margin-top:14px">{{ data.email_security.dkim.note }}</p>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</section>
+
+<section class="cta-sec">
+  <div class="container">
+    <div class="cta-card">
+      <h2>Run this on any domain.</h2>
+      <p>Same data, JSON response, REST API. Free tier available, no card required.</p>
+      <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+        <a href="/domain-intelligence-api" class="btn btn-p btn-lg">View API &rarr;</a>
+        <a href="https://rapidapi.com/osiris-technical-institute-osiris-technical-institute-default/api/domain-intelligence-api" target="_blank" rel="noopener" class="btn btn-s btn-lg">RapidAPI Listing</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+{% if related %}
+<section class="dsec">
+  <div class="container">
+    <span class="slabel">Related</span>
+    <h2 class="stitle">More domain reports</h2>
+    <p class="ssub">Browse intelligence reports for other popular domains.</p>
+    <div class="rel-grid">
+      {% for d in related %}
+      <a class="rel-card" href="/report/{{ d }}">
+        <span class="rel-domain">{{ d }}</span>
+        <svg class="rel-arrow" width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M6.22 4.22a.75.75 0 011.06 0l3.25 3.25a.75.75 0 010 1.06l-3.25 3.25a.75.75 0 11-1.06-1.06L8.94 8 6.22 5.28a.75.75 0 010-1.06z"/></svg>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
+<footer>
+  <div class="container">
+    <div class="footer-grid">
+      <div>
+        <div class="foot-brand">Osiris Technical Institute</div>
+        <span class="foot-product">Domain Intelligence</span>
+        <p class="foot-tag">Aggregated WHOIS, DNS, SSL, subdomains, and email-security intelligence in a single REST call.</p>
+      </div>
+      <div>
+        <div class="foot-h">Product</div>
+        <a class="foot-l" href="/domain-intelligence-api">Overview</a>
+        <a class="foot-l" href="/lookup">Lookup</a>
+        <a class="foot-l" href="/whois-api">WHOIS API</a>
+        <a class="foot-l" href="/dns-lookup-api">DNS Lookup API</a>
+        <a class="foot-l" href="/ssl-certificate-api">SSL Certificate API</a>
+        <a class="foot-l" href="/subdomain-enumeration-api">Subdomain API</a>
+        <a class="foot-l" href="/email-security-api">Email Security API</a>
+      </div>
+      <div>
+        <div class="foot-h">Resources</div>
+        <a class="foot-l" href="/reports">All reports</a>
+        <a class="foot-l" href="https://rapidapi.com/osiris-technical-institute-osiris-technical-institute-default/api/domain-intelligence-api" target="_blank" rel="noopener">RapidAPI listing</a>
+        <a class="foot-l" href="https://github.com/osiris-technical-institute/domain-intelligence-api" target="_blank" rel="noopener">GitHub repo</a>
+        <a class="foot-l" href="https://github.com/osiris-technical-institute/domain-intelligence-api/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a>
+      </div>
+      <div>
+        <div class="foot-h">Contact</div>
+        <a class="foot-l foot-email" href="mailto:support@oti-labs.com">support@oti-labs.com</a>
+      </div>
+    </div>
+    <div class="foot-bot">
+      <span>&copy; 2026 Osiris Technical Institute</span>
+      <span>Report generated {{ generated_at }}</span>
+    </div>
+  </div>
+</footer>
+
+<div id="stickyCTA" class="sticky-cta" role="complementary" aria-label="API call to action">
+  <div class="sticky-cta-inner">
+    <span class="sticky-cta-txt">Automate domain intel &mdash; monitoring, enrichment, alerts, audits &mdash; free 1k req/mo</span>
+    <a href="/domain-intelligence-api#pricing" class="btn btn-p btn-sm">Get free key</a>
+    <button class="sticky-cta-x" type="button" aria-label="Dismiss" id="stickyCTAx">&times;</button>
+  </div>
+</div>
+<script>
+(function(){
+  // Refresh confirmation — when page is loaded with ?refresh=1 the server has
+  // bypassed all caches; show a brief visual confirmation and strip the query
+  // param so a manual reload doesn't burn another refresh against the rate limit.
+  try {
+    var rp = new URLSearchParams(location.search);
+    if (rp.has("refresh")) {
+      var refBtn = document.getElementById("rmRefresh");
+      if (refBtn) {
+        var lbl = refBtn.querySelector(".rm-refresh-label");
+        if (lbl) lbl.textContent = "Refreshed just now";
+        refBtn.classList.add("done");
+      }
+      history.replaceState({}, "", location.pathname);
+    }
+  } catch(e) {}
+  // Mobile nav hamburger toggle
+  var navT=document.getElementById("navToggle");
+  var navC=document.getElementById("navCollapse");
+  if(navT&&navC){
+    var bIc=navT.querySelector(".ic-burger");
+    var xIc=navT.querySelector(".ic-close");
+    function setNav(on){
+      navC.classList.toggle("open",on);
+      navT.setAttribute("aria-expanded",on?"true":"false");
+      navT.setAttribute("aria-label",on?"Close menu":"Open menu");
+      if(bIc)bIc.style.display=on?"none":"block";
+      if(xIc)xIc.style.display=on?"block":"none";
+    }
+    navT.addEventListener("click",function(e){e.stopPropagation();setNav(!navC.classList.contains("open"));});
+    navC.querySelectorAll("a").forEach(function(a){a.addEventListener("click",function(){setNav(false);});});
+    document.addEventListener("click",function(e){if(!navC.classList.contains("open"))return;if(navC.contains(e.target)||navT.contains(e.target))return;setNav(false);});
+    document.addEventListener("keydown",function(e){if(e.key==="Escape"&&navC.classList.contains("open"))setNav(false);});
+  }
+  // --- Lookup another domain (in-page form) ---
+  var laForm=document.getElementById("lookupAnother");
+  var laIn=document.getElementById("lookupAnotherIn");
+  var laErr=document.getElementById("lookupAnotherErr");
+  if(laForm&&laIn){
+    var LA_RE=/^(?=.{1,253}$)(?!-)([a-z0-9-]{1,63}(?<!-)\.)+[a-z]{2,63}$/i;
+    function laNormalize(v){
+      if(!v)return "";
+      v=v.trim().toLowerCase();
+      v=v.replace(/^https?:\/\//,"").replace(/^www\./,"");
+      v=v.split("/")[0].split("?")[0].split("#")[0];
+      return v;
+    }
+    laForm.addEventListener("submit",function(e){
+      e.preventDefault();
+      var v=laNormalize(laIn.value);
+      if(!v||!LA_RE.test(v)){
+        if(laErr)laErr.classList.add("on");
+        laIn.focus();
+        return;
+      }
+      if(laErr)laErr.classList.remove("on");
+      window.location.href="/report/"+encodeURIComponent(v);
+    });
+    laIn.addEventListener("input",function(){if(laErr&&laErr.classList.contains("on"))laErr.classList.remove("on");});
+  }
+
+  var s=document.getElementById("stickyCTA");
+  if(!s)return;
+  try{if(localStorage.getItem("dia_cta_dismissed"))s.style.display="none";}catch(e){}
+  var x=document.getElementById("stickyCTAx");
+  if(x)x.addEventListener("click",function(){s.style.display="none";try{localStorage.setItem("dia_cta_dismissed","1");}catch(e){}});
+  document.querySelectorAll(".api-cta-tab").forEach(function(t){
+    t.addEventListener("click",function(){
+      document.querySelectorAll(".api-cta-tab").forEach(function(x){x.classList.remove("on");});
+      document.querySelectorAll(".api-cta-pane").forEach(function(p){p.classList.remove("on");});
+      t.classList.add("on");
+      var k=t.dataset.t;
+      var pane=document.querySelector('.api-cta-pane[data-p="'+k+'"]');
+      if(pane)pane.classList.add("on");
+    });
+  });
+  var c=document.querySelector(".api-cta-copy");
+  if(c)c.addEventListener("click",function(){
+    var p=document.querySelector(".api-cta-pane.on");
+    if(!p)return;
+    var t=p.textContent;
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(t).then(function(){var o=c.textContent;c.textContent="Copied";setTimeout(function(){c.textContent=o;},1400);});
+    }
+  });
+})();
+</script>
+<script>
+(function(){ /* foot-email-copy */
+  var els=document.querySelectorAll('.foot-email');
+  if(!els.length)return;
+  function flash(el,msg){
+    var orig=el.textContent,oc=el.style.color;
+    el.textContent=msg;el.style.color='var(--accent)';
+    setTimeout(function(){el.textContent=orig;el.style.color=oc;},1400);
+  }
+  els.forEach(function(el){
+    el.setAttribute('title','Click to copy');
+    el.addEventListener('click',function(e){
+      e.preventDefault();
+      var email=(el.getAttribute('href')||'').replace(/^mailto:/,'')||el.textContent.trim();
+      if(navigator.clipboard&&navigator.clipboard.writeText){
+        navigator.clipboard.writeText(email).then(function(){flash(el,'Copied!');}).catch(function(){window.location.href='mailto:'+email;});
+      }else{
+        var ta=document.createElement('textarea');
+        ta.value=email;ta.style.position='fixed';ta.style.opacity='0';
+        document.body.appendChild(ta);ta.select();
+        try{document.execCommand('copy');flash(el,'Copied!');}catch(err){window.location.href='mailto:'+email;}
+        document.body.removeChild(ta);
+      }
+    });
+  });
+})();
+</script>
+</body>
+</html>
