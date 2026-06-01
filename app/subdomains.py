@@ -92,6 +92,12 @@ BRUTE_FLOOR_GRACE = 2.5
 # headroom over the slowest reliable source (dns-brute ~1.3s).
 SOFT_DEADLINE = 3.0
 
+# Synchronous "complete" mode (the API ?wait=1 flag). Block up to this long for the
+# slow sources (crt.sh, subfinder) to finish, returning a fuller result in one call
+# instead of the fast snapshot. Anything still pending after this still enriches in
+# the background. Opt-in only — the default path stays fast.
+WAIT_DEADLINE = float(os.environ.get("SUBDOMAINS_WAIT_DEADLINE", "20.0"))
+
 # Warnings only appear when coverage is below this count
 LOW_COVERAGE_THRESHOLD = 20
 
@@ -542,6 +548,36 @@ async def _src_dns_bruteforce(domain: str, out: set) -> str:
     return f"dns-brute ok +{len(out) - before} (wordlist {len(names)})"
 
 
+def _clean_source(entry: str) -> str:
+    """Normalize a raw per-source status into a clean, uniform label with no
+    upstream marketing/error text. Powers the public `sources_used` field and the
+    UI source chips. Examples:
+        'rapiddns ok +35'                                  -> 'rapiddns: 35 found'
+        'crt.sh pending (enriching in background)'         -> 'crt.sh: enriching'
+        'hackertarget limited: API count exceeded - ...'   -> 'hackertarget: rate-limited'
+        'subfinder skipped: not installed'                 -> 'subfinder: skipped'
+        'otx ReadTimeout: ...' / 'crt.sh status 502'       -> 'otx: unavailable'
+    """
+    parts = str(entry).split(None, 1)
+    name = parts[0] if parts else "?"
+    rest = (parts[1] if len(parts) > 1 else "").lower()
+    m = re.search(r"\+(\d+)", str(entry))
+    if rest.startswith("ok"):
+        return f"{name}: {m.group(1) if m else '0'} found"
+    if "pending" in rest or "enrich" in rest:
+        return f"{name}: enriching"
+    if "rate" in rest or "limited" in rest or "count exceeded" in rest or " 429" in rest:
+        return f"{name}: rate-limited"
+    if "skip" in rest or "not installed" in rest or ("no " in rest and "key" in rest):
+        return f"{name}: skipped"
+    return f"{name}: unavailable"
+
+
+def sources_enriching(sources_used) -> bool:
+    """True if any source in a cleaned `sources_used` list is still enriching."""
+    return any("enriching" in str(s) for s in (sources_used or []))
+
+
 def _assemble(domain: str, found: set, results_by_name: dict,
               pending_names: list, limit: int) -> dict:
     """Build the response dict from whatever sources have reported so far.
@@ -553,16 +589,16 @@ def _assemble(domain: str, found: set, results_by_name: dict,
     failed_msgs: list = []
     for name, res in results_by_name.items():
         if isinstance(res, Exception):
-            msg = f"{name} {type(res).__name__}: {res}"
-            sources_used.append(msg)
-            failed_msgs.append(msg)
+            clean = _clean_source(f"{name} {type(res).__name__}: {res}")
+            sources_used.append(clean)
+            failed_msgs.append(clean)
         else:
-            sources_used.append(res)
+            sources_used.append(_clean_source(res))
             # Source reported failure if "ok" and "skipped" both absent
             if "ok" not in res and "skipped" not in res:
-                failed_msgs.append(res)
+                failed_msgs.append(_clean_source(res))
     for name in pending_names:
-        sources_used.append(f"{name} pending (enriching in background)")
+        sources_used.append(_clean_source(f"{name} pending"))
 
     # Hard error only when nothing found, nothing still running, and ~all failed.
     if not found and not pending_names and len(failed_msgs) >= 5:
@@ -618,7 +654,7 @@ async def _enrich_in_background(domain: str, found: set, results_by_name: dict,
             pass
 
 
-async def get_subdomains(domain: str, limit: int = 1000) -> dict:
+async def get_subdomains(domain: str, limit: int = 1000, wait: bool = False) -> dict:
     """Discover subdomains for *domain* via concurrent multi-source aggregation.
 
     Runs the direct sources in parallel: crt.sh, certspotter, hackertarget,
@@ -628,6 +664,10 @@ async def get_subdomains(domain: str, limit: int = 1000) -> dict:
     reported (SOFT_DEADLINE); any slow-but-alive straggler (typically crt.sh or
     subfinder) keeps running in the background and writes its fuller result into
     the cache, so the next lookup of this domain is complete.
+
+    With wait=True (the API ?wait=1 mode), block up to WAIT_DEADLINE for the slow
+    sources to finish and return a fuller result in one call instead of the fast
+    snapshot; anything still pending after that still enriches in the background.
 
     Warnings are suppressed when total coverage is healthy
     (>= LOW_COVERAGE_THRESHOLD), since partial-source-failure isn't actionable
@@ -656,7 +696,7 @@ async def get_subdomains(domain: str, limit: int = 1000) -> dict:
     }
     task_to_name = {t: n for n, t in tasks.items()}
 
-    done, pending = await asyncio.wait(tasks.values(), timeout=SOFT_DEADLINE)
+    done, pending = await asyncio.wait(tasks.values(), timeout=(WAIT_DEADLINE if wait else SOFT_DEADLINE))
 
     # Protect the always-on floor: dns-brute is our coverage guarantee, so if it
     # was just over the soft deadline (concurrent-load contention), give it a
