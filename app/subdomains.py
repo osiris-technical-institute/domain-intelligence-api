@@ -1,15 +1,18 @@
 """Subdomain discovery via Certificate Transparency + passive DNS + always-on bruteforce.
 
-Sources queried concurrently (asyncio.gather), all in parallel:
+Direct sources queried concurrently for a fast first response:
   1. crt.sh          - Sectigo CT log aggregator, largest free dataset
   2. certspotter     - SSLMate CT mirror, complementary coverage
   3. hackertarget    - passive DNS hostsearch (rate-limited free tier, 50/day per IP)
-  4. AlienVault OTX  - passive DNS (high free quota with API key)
+  4. rapiddns        - free keyless passive DNS (replaced network-blocked OTX)
   5. VirusTotal v3   - subdomains endpoint (500/day free per API key)
-  6. DNS bruteforce  - ~500-word curated wordlist, ALWAYS runs (no third-party limit)
+  6. DNS bruteforce  - 773-word curated wordlist, ALWAYS runs (no third-party limit)
 
-OTX and VT only fire when their keys are configured via env vars OTX_API_KEY /
-VT_API_KEY; otherwise they no-op cleanly.
+Plus an optional subfinder background-enrichment pass aggregating 25+ more passive
+sources for comprehensive coverage (no-ops cleanly if the binary is absent).
+
+VT (and a dormant OTX source) only fire when their keys are configured via env
+vars VT_API_KEY / OTX_API_KEY; otherwise they no-op cleanly.
 
 Bruteforce now ALWAYS runs alongside the other sources (not just on full CT
 failure). Reasons:
@@ -618,11 +621,13 @@ async def _enrich_in_background(domain: str, found: set, results_by_name: dict,
 async def get_subdomains(domain: str, limit: int = 1000) -> dict:
     """Discover subdomains for *domain* via concurrent multi-source aggregation.
 
-    Runs all six sources in parallel: crt.sh, certspotter, hackertarget, OTX,
-    VirusTotal, and always-on DNS bruteforce. Returns as soon as the reliable
-    fast sources have reported (SOFT_DEADLINE); any slow-but-alive straggler
-    (typically crt.sh) keeps running in the background and writes its fuller
-    result into the cache, so the next lookup of this domain is complete.
+    Runs the direct sources in parallel: crt.sh, certspotter, hackertarget,
+    rapiddns, VirusTotal, and always-on DNS bruteforce, plus an optional
+    subfinder background enrichment aggregating 25+ more passive sources for
+    comprehensive coverage. Returns as soon as the reliable fast sources have
+    reported (SOFT_DEADLINE); any slow-but-alive straggler (typically crt.sh or
+    subfinder) keeps running in the background and writes its fuller result into
+    the cache, so the next lookup of this domain is complete.
 
     Warnings are suppressed when total coverage is healthy
     (>= LOW_COVERAGE_THRESHOLD), since partial-source-failure isn't actionable
