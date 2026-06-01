@@ -149,6 +149,9 @@ app/                  FastAPI service code
   ssl_lookup.py       Live TLS handshake
   subdomains.py       6 sources: crt.sh, certspotter, hackertarget, AlienVault OTX, VirusTotal, always-on DNS bruteforce (773-word wordlist, wildcard detection, background enrichment)
   email_security.py   SPF + DMARC + DKIM (auto-probed across ~29 common selectors)
+  report.py           SEO-indexable HTML report renderer (page-level cache, ?refresh=1 escape hatch)
+  seed_domains.py     Curated sitemap domain list + prewarm set
+  templates/          Jinja2 templates for the HTML report + reports index
   metrics.py          Prometheus exporter
   logging_config.py   Structured JSON logging
   timeouts.py         asyncio.wait_for helpers
@@ -170,4 +173,5 @@ requirements.txt      Python deps
 ---
 
 Built and maintained by [Osiris Technical Institute](https://oti-labs.com).
+
 
