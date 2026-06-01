@@ -30,6 +30,7 @@ Response shape (backward-compatible):
 import asyncio
 import logging
 import os
+import re
 from typing import Optional
 
 import httpx
@@ -58,6 +59,17 @@ CERTSPOTTER_TIMEOUT  = _timeout(6.0)
 HACKERTARGET_TIMEOUT = _timeout(4.0)
 OTX_TIMEOUT          = _timeout(2.5)   # reliably unreachable from this VPS right now; fail fast so it doesn't drag
 VT_TIMEOUT           = _timeout(6.0)
+RAPIDDNS_TIMEOUT     = _timeout(7.0)   # free keyless passive-DNS (HTML); reliable from this VPS, replaces dead OTX
+
+# subfinder: external MIT binary that aggregates 20+ passive sources with proper
+# CT-log handling. Slow (~15-60s) so it ALWAYS lands in the background-enrich path —
+# the cold response stays fast on our direct sources, and the cached/second lookup
+# becomes comprehensive (matches/beats subfinder-alone since we MERGE).
+SUBFINDER_BIN       = os.environ.get("SUBFINDER_BIN", "/usr/local/bin/subfinder")
+SUBFINDER_MAXTIME   = os.environ.get("SUBFINDER_MAXTIME", "1")   # minutes (subfinder -max-time)
+SUBFINDER_SRC_TO    = os.environ.get("SUBFINDER_SRC_TIMEOUT", "15")  # per-source seconds
+SUBFINDER_HARD_KILL = 90        # asyncio safety kill (s)
+SUBFINDER_PARSE_CAP = 20000     # bound memory on huge domains (github returns 41k+)
 DNS_BRUTE_TIMEOUT    = 1.0   # per name; NXDOMAIN comes back fast
 DNS_BRUTE_CONCURRENCY = 100  # proven value; raising it under event-loop contention is counterproductive
 
@@ -358,35 +370,103 @@ async def _src_otx(client: httpx.AsyncClient, domain: str, out: set) -> str:
 
 
 async def _src_virustotal(client: httpx.AsyncClient, domain: str, out: set) -> str:
-    """Query VirusTotal v3 subdomains endpoint. Requires VT_API_KEY env var."""
+    """Query VirusTotal v3 subdomains endpoint, paginating up to 3 pages (≤120
+    results) via the meta.cursor. Free tier is 4 req/min / 500/day, so 3 pages
+    per lookup is well within budget at our traffic. Requires VT_API_KEY."""
     if not VT_KEY:
         return "virustotal skipped: no VT_API_KEY"
+    before = len(out)
     try:
-        # VT free tier: 4 req/min, 500/day. One call here, max 40 results.
-        # Could paginate via cursor but 40 is usually enough for a single namespace.
-        r = await client.get(
-            f"https://www.virustotal.com/api/v3/domains/{domain}/subdomains",
-            params={"limit": "40"},
-            timeout=VT_TIMEOUT,
-            headers={"x-apikey": VT_KEY, "User-Agent": "domain-intel/0.3"},
-        )
-        if r.status_code == 429:
-            return "virustotal rate-limited"
-        if r.status_code != 200:
-            return f"virustotal status {r.status_code}"
-        try:
+        cursor = None
+        for page in range(3):
+            params = {"limit": "40"}
+            if cursor:
+                params["cursor"] = cursor
+            r = await client.get(
+                f"https://www.virustotal.com/api/v3/domains/{domain}/subdomains",
+                params=params, timeout=VT_TIMEOUT,
+                headers={"x-apikey": VT_KEY, "User-Agent": "domain-intel/0.4"},
+            )
+            if r.status_code != 200:
+                # first page failed = real failure; later page = keep what we got
+                if page == 0:
+                    return "virustotal rate-limited" if r.status_code == 429 else f"virustotal status {r.status_code}"
+                break
             data = r.json()
-        except Exception:
-            return "virustotal non-json"
-        items = data.get("data") or []
-        if not isinstance(items, list):
-            return "virustotal unexpected shape"
-        before = len(out)
-        for it in items:
-            _add(out, it.get("id") or "", domain)
+            for it in (data.get("data") or []):
+                _add(out, it.get("id") or "", domain)
+            cursor = (data.get("meta") or {}).get("cursor")
+            if not cursor:
+                break
         return f"virustotal ok +{len(out) - before}"
     except Exception as exc:
+        if len(out) > before:
+            return f"virustotal ok +{len(out) - before}"
         return f"virustotal {type(exc).__name__}: {exc}"
+
+
+async def _src_rapiddns(client: httpx.AsyncClient, domain: str, out: set) -> str:
+    """Query rapiddns.io — free, keyless passive-DNS (HTML table). Reliable from
+    this VPS; added 2026-06-01 to replace AlienVault OTX (which is network-blocked
+    from the Hetzner IP range and contributed nothing)."""
+    try:
+        r = await client.get(
+            f"https://rapiddns.io/subdomain/{domain}?full=1",
+            timeout=RAPIDDNS_TIMEOUT,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; domain-intel/0.4; +https://oti-labs.com)"},
+        )
+        if r.status_code == 429:
+            return "rapiddns rate-limited"
+        if r.status_code != 200:
+            return f"rapiddns status {r.status_code}"
+        before = len(out)
+        for m in re.findall(rf"([a-zA-Z0-9_\-.]+\.{re.escape(domain)})\b", r.text):
+            _add(out, m, domain)
+        return f"rapiddns ok +{len(out) - before}"
+    except Exception as exc:
+        return f"rapiddns {type(exc).__name__}: {exc}"
+
+
+async def _src_subfinder(domain: str, out: set) -> str:
+    """Run subfinder (external binary) as a comprehensive passive aggregator.
+    Subprocess, bounded by -max-time + an asyncio hard-kill. Slow by design — it
+    lands in the background-enrich path, making the cached/second lookup complete."""
+    if not os.path.exists(SUBFINDER_BIN):
+        return "subfinder skipped: not installed"
+    proc = None
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            SUBFINDER_BIN, "-d", domain, "-silent", "-duc",
+            "-timeout", SUBFINDER_SRC_TO, "-max-time", SUBFINDER_MAXTIME,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
+        )
+        try:
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=SUBFINDER_HARD_KILL)
+        except asyncio.TimeoutError:
+            try:
+                proc.kill()
+                await proc.wait()
+            except Exception:
+                pass
+            return "subfinder timeout"
+        before = len(out)
+        added = 0
+        for line in stdout.decode(errors="ignore").splitlines():
+            name = line.strip().lower()
+            if not name:
+                continue
+            _add(out, name, domain)
+            added += 1
+            if added >= SUBFINDER_PARSE_CAP:
+                break
+        return f"subfinder ok +{len(out) - before}"
+    except Exception as exc:
+        if proc is not None:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+        return f"subfinder {type(exc).__name__}: {exc}"
 
 
 async def _resolve_one(resolver, name: str) -> Optional[str]:
@@ -564,9 +644,10 @@ async def get_subdomains(domain: str, limit: int = 1000) -> dict:
         "crt.sh":       asyncio.ensure_future(_src_crtsh(client, domain, found)),
         "certspotter":  asyncio.ensure_future(_src_certspotter(client, domain, found)),
         "hackertarget": asyncio.ensure_future(_src_hackertarget(client, domain, found)),
-        "otx":          asyncio.ensure_future(_src_otx(client, domain, found)),
+        "rapiddns":     asyncio.ensure_future(_src_rapiddns(client, domain, found)),
         "virustotal":   asyncio.ensure_future(_src_virustotal(client, domain, found)),
         "dns-brute":    asyncio.ensure_future(_src_dns_bruteforce(domain, found)),
+        "subfinder":    asyncio.ensure_future(_src_subfinder(domain, found)),
     }
     task_to_name = {t: n for n, t in tasks.items()}
 
