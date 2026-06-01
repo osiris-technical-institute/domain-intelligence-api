@@ -20,7 +20,7 @@
     { "name": "DNS", "description": "DNS record lookups (A, AAAA, MX, TXT, NS, CAA, SOA)" },
     { "name": "SSL", "description": "TLS/SSL certificate inspection via live handshake" },
     { "name": "WHOIS", "description": "Domain registration data via 4-tier fallback chain (rdap.org -> IANA bootstrap -> 22 hardcoded RDAP servers -> port-43 socket WHOIS for 50+ TLDs)" },
-    { "name": "Subdomains", "description": "Subdomain discovery via 5 parallel sources (crt.sh, certspotter, hackertarget, AlienVault OTX, VirusTotal) plus always-on DNS bruteforce" },
+    { "name": "Subdomains", "description": "Subdomain discovery via 5 parallel sources (crt.sh, certspotter, hackertarget, AlienVault OTX, VirusTotal) plus always-on DNS bruteforce with wildcard filtering" },
     { "name": "Email Security", "description": "SPF, DMARC, and DKIM (auto-discovered via ~29 common selectors)" },
     { "name": "Demo", "description": "Public rate-limited demo endpoint" },
     { "name": "Utility", "description": "Service utilities" }
@@ -43,7 +43,7 @@
     "/lookup/{domain}": {
       "get": {
         "summary": "Full Domain Intelligence Lookup",
-        "description": "Aggregate endpoint: returns DNS, SSL, WHOIS, subdomains, and email security in one parallel call. Most popular endpoint. Sub-lookups run concurrently via asyncio.gather; total wall time bounded by the slowest source (~1-5s uncached, ~50ms cached).",
+        "description": "Aggregate endpoint: returns DNS, SSL, WHOIS, subdomains, and email security in one parallel call. Most popular endpoint. Sub-lookups run concurrently; total wall time bounded by the slowest source (~1-5s uncached, ~50ms cached).",
         "operationId": "lookup_lookup__domain__get",
         "tags": ["Aggregate"],
         "parameters": [
@@ -103,7 +103,7 @@
     "/domain/{domain}/subdomains": {
       "get": {
         "summary": "Subdomain Enumeration",
-        "description": "Enumerates subdomains via 5 parallel upstream sources (crt.sh, certspotter, hackertarget, AlienVault OTX, VirusTotal v3) PLUS an always-on DNS bruteforce against a curated 686-word wordlist via public resolvers (1.1.1.1, 8.8.8.8, 9.9.9.9). The bruteforce runs every time alongside upstream sources — not just as fallback — so the response is never empty regardless of upstream status. Results are merged, deduplicated, and sorted. The sources_used array reports per-source status. The warnings field is coverage-aware: only populated when total found drops below 20 subdomains. Up to 1,000 results returned per request.",
+        "description": "Enumerates subdomains via 5 parallel upstream sources (crt.sh, certspotter, hackertarget, AlienVault OTX, VirusTotal v3) PLUS an always-on DNS bruteforce against a curated 773-word wordlist resolved (A + CNAME) across 8 anycast resolvers (Cloudflare, Google, Quad9, OpenDNS). The bruteforce runs every time alongside upstream sources — not just as fallback — so the response is never empty regardless of upstream status. Automatic wildcard-DNS detection skips brute-forcing on wildcard zones to avoid false positives. Reliable sources return within a ~3s soft deadline; a slow Certificate Transparency source finishes in the background and enriches the cache for the next lookup. Results are merged, deduplicated, and sorted. The sources_used array reports per-source status. The warnings field is coverage-aware: only populated when total found drops below 20 subdomains. Up to 1,000 results returned per request.",
         "operationId": "subs_only_domain__domain__subdomains_get",
         "tags": ["Subdomains"],
         "parameters": [
@@ -168,3 +168,4 @@
     }
   }
 }
+
