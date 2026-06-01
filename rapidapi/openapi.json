@@ -20,7 +20,7 @@
     { "name": "DNS", "description": "DNS record lookups (A, AAAA, MX, TXT, NS, CAA, SOA)" },
     { "name": "SSL", "description": "TLS/SSL certificate inspection via live handshake" },
     { "name": "WHOIS", "description": "Domain registration data via 4-tier fallback chain (rdap.org -> IANA bootstrap -> 22 hardcoded RDAP servers -> port-43 socket WHOIS for 50+ TLDs)" },
-    { "name": "Subdomains", "description": "Subdomain discovery via 5 parallel sources (crt.sh, certspotter, hackertarget, AlienVault OTX, VirusTotal) plus always-on DNS bruteforce with wildcard filtering" },
+    { "name": "Subdomains", "description": "Subdomain discovery via Certificate Transparency logs + passive DNS (crt.sh, certspotter, hackertarget, rapiddns, VirusTotal) plus always-on DNS bruteforce with wildcard filtering and background enrichment for comprehensive coverage" },
     { "name": "Email Security", "description": "SPF, DMARC, and DKIM (auto-discovered via ~29 common selectors)" },
     { "name": "Demo", "description": "Public rate-limited demo endpoint" },
     { "name": "Utility", "description": "Service utilities" }
@@ -103,7 +103,7 @@
     "/domain/{domain}/subdomains": {
       "get": {
         "summary": "Subdomain Enumeration",
-        "description": "Enumerates subdomains via 5 parallel upstream sources (crt.sh, certspotter, hackertarget, AlienVault OTX, VirusTotal v3) PLUS an always-on DNS bruteforce against a curated 773-word wordlist resolved (A + CNAME) across 8 anycast resolvers (Cloudflare, Google, Quad9, OpenDNS). The bruteforce runs every time alongside upstream sources — not just as fallback — so the response is never empty regardless of upstream status. Automatic wildcard-DNS detection skips brute-forcing on wildcard zones to avoid false positives. Reliable sources return within a ~3s soft deadline; a slow Certificate Transparency source finishes in the background and enriches the cache for the next lookup. Results are merged, deduplicated, and sorted. The sources_used array reports per-source status. The warnings field is coverage-aware: only populated when total found drops below 20 subdomains. Up to 1,000 results returned per request.",
+        "description": "Enumerates subdomains via Certificate Transparency logs + passive DNS (crt.sh, certspotter, hackertarget, rapiddns, VirusTotal v3 — paginated) PLUS an always-on DNS bruteforce against a curated 773-word wordlist resolved (A + CNAME) across 8 anycast resolvers (Cloudflare, Google, Quad9, OpenDNS). The bruteforce runs every time — not just as fallback — so the response is never empty regardless of upstream status. Automatic wildcard-DNS detection skips brute-forcing on wildcard zones to avoid false positives. Reliable fast sources return within a ~3s soft deadline; slow stragglers (including an optional subfinder aggregation of 20+ more passive sources) finish in the background and enrich the cache for comprehensive coverage on the next lookup. Results are merged, deduplicated, and sorted. The sources_used array reports per-source status. The warnings field is coverage-aware: only populated when total found drops below 20 subdomains. Up to 1,000 results returned per request.",
         "operationId": "subs_only_domain__domain__subdomains_get",
         "tags": ["Subdomains"],
         "parameters": [
@@ -168,4 +168,5 @@
     }
   }
 }
+
 
