@@ -7,7 +7,7 @@ import re
 import uuid
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, HTMLResponse
 
 from app.dns_lookup import get_dns_records
 from app.ssl_lookup import get_ssl_info
@@ -20,13 +20,14 @@ from app.metrics import (
 )
 from app.timeouts import with_timeout
 from app.logging_config import configure as configure_logging
+from app.report import render_report_cached, render_reports_index_cached
 
 configure_logging()
 log = logging.getLogger("domain-intel")
 
 PROXY_SECRET = os.environ.get("RAPIDAPI_PROXY_SECRET", "")
-AUTH_BYPASS_PATHS = {"/health", "/docs", "/openapi.json", "/redoc", "/metrics"}
-AUTH_BYPASS_PREFIXES = ("/demo/",)
+AUTH_BYPASS_PATHS = {"/health", "/docs", "/openapi.json", "/redoc", "/metrics", "/sitemap.xml", "/robots.txt", "/reports", "/demo-preview-rotation"}
+AUTH_BYPASS_PREFIXES = ("/demo/", "/demo-preview/", "/report/")
 
 app = FastAPI(
     title="Domain Intelligence API",
@@ -284,3 +285,147 @@ async def demo_lookup(domain: str, request: Request):
         "subdomains": subs_t[0],
         "email_security": email_t[0],
     }
+
+
+
+# ---------- Sprint H+: cache-only demo preview (landing page auto-load) ----------
+# Whitelisted, never counts against rate limit, serves only what's already cached.
+# Cron at /agent/services/domain-intel/warm-demo-rotation.sh keeps these warm.
+DEMO_ROTATION = ["stripe.com", "github.com", "openai.com", "cloudflare.com", "vercel.com"]
+
+@app.get("/demo-preview/{domain}")
+async def demo_preview(domain: str):
+    """Cache-only preview for landing-page auto-load. Whitelisted. No upstream calls,
+    no rate-limit accounting. Missing namespaces are returned as null."""
+    from app.cache import get_cached
+    d = _validate(domain)
+    if d not in DEMO_ROTATION:
+        return JSONResponse(status_code=404, content={"error": "not_in_rotation"})
+    dns = await get_cached("dns", d)
+    ssl_ = await get_cached("ssl", d)
+    whois_ = await get_cached("whois", d)
+    subs = await get_cached("subdomains", d)
+    email = await get_cached("email", d)
+    return {
+        "domain": d,
+        "preview": True,
+        "note": "Cached preview \u2014 try the demo above for any domain.",
+        "dns": dns,
+        "ssl": ssl_,
+        "whois": whois_,
+        "subdomains": subs,
+        "email_security": email,
+    }
+
+
+@app.get("/demo-preview-rotation")
+async def demo_preview_rotation():
+    """Return the rotation list so the landing JS can sync deterministically."""
+    return {"domains": DEMO_ROTATION}
+
+# ---------- Sprint H: SEO-friendly HTML report endpoint ----------
+from app.seed_domains import SITEMAP_DOMAINS
+
+
+@app.api_route("/reports", methods=["GET", "HEAD"], response_class=HTMLResponse)
+async def reports_index():
+    """SEO-indexable directory hub listing all SITEMAP_DOMAINS. No auth, 24h Redis cache."""
+    html = await render_reports_index_cached()
+    return HTMLResponse(content=html)
+
+
+REPORT_REFRESH_DAILY_LIMIT = 3  # Per-IP cap on the ?refresh=1 escape hatch.
+
+
+@app.api_route("/report/{domain}", methods=["GET", "HEAD"], response_class=HTMLResponse)
+async def report(domain: str, request: Request, refresh: int = 0):
+    """SEO-indexable HTML domain intelligence report. No auth, page-level cached.
+
+    Query params:
+      refresh=1 — bypass HTML + per-namespace caches and re-fetch from upstream.
+                  Rate-limited to REPORT_REFRESH_DAILY_LIMIT requests per IP per day.
+                  Silently degrades to a normal (cached) load if the limit is hit,
+                  so a hammered refresh button never breaks the page.
+    """
+    d = _validate(domain)
+    force_refresh = False
+    if refresh and request.method == "GET":
+        ip = _client_ip(request)
+        today = _dt.datetime.utcnow().strftime("%Y-%m-%d")
+        rl_key = f"report:refresh:rl:{ip}:{today}"
+        redis = get_redis()
+        try:
+            count = await redis.incr(rl_key)
+            if count == 1:
+                await redis.expire(rl_key, 86400)
+        except Exception as e:
+            log.warning("refresh_rl_err err=%s", e)
+            count = 1
+        if count <= REPORT_REFRESH_DAILY_LIMIT:
+            force_refresh = True
+            log.info("report_refresh domain=%s ip=%s count=%d", d, ip, count)
+        else:
+            log.info("report_refresh_rl_exceeded domain=%s ip=%s count=%d", d, ip, count)
+    html = await render_report_cached(d, force_refresh=force_refresh)
+    return HTMLResponse(content=html)
+
+
+@app.api_route("/sitemap.xml", methods=["GET", "HEAD"], response_class=Response)
+async def sitemap():
+    """XML sitemap listing the landing page + all seed domain reports."""
+    today = _dt.datetime.utcnow().strftime("%Y-%m-%d")
+    lines = ['<?xml version="1.0" encoding="UTF-8"?>']
+    lines.append('<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">')
+    # Landing page (highest priority)
+    lines.append('  <url>')
+    lines.append('    <loc>https://oti-labs.com/domain-intelligence-api</loc>')
+    lines.append(f'    <lastmod>{today}</lastmod>')
+    lines.append('    <changefreq>weekly</changefreq>')
+    lines.append('    <priority>1.0</priority>')
+    lines.append('  </url>')
+    # Reports directory hub (high priority, links to all reports)
+    lines.append('  <url>')
+    lines.append('    <loc>https://oti-labs.com/reports</loc>')
+    lines.append(f'    <lastmod>{today}</lastmod>')
+    lines.append('    <changefreq>weekly</changefreq>')
+    lines.append('    <priority>0.9</priority>')
+    lines.append('  </url>')
+    # Domain lookup tool (high-leverage SEO target — same priority as landing)
+    lines.append("  <url>")
+    lines.append("    <loc>https://oti-labs.com/lookup</loc>")
+    lines.append(f"    <lastmod>{today}</lastmod>")
+    lines.append("    <changefreq>weekly</changefreq>")
+    lines.append("    <priority>1.0</priority>")
+    lines.append("  </url>")
+    # Endpoint landing pages (high priority — buyer-intent SEO targets)
+    for slug in ("whois-api", "dns-lookup-api", "ssl-certificate-api", "subdomain-enumeration-api", "email-security-api"):
+        lines.append("  <url>")
+        lines.append(f"    <loc>https://oti-labs.com/{slug}</loc>")
+        lines.append(f"    <lastmod>{today}</lastmod>")
+        lines.append("    <changefreq>weekly</changefreq>")
+        lines.append("    <priority>0.95</priority>")
+        lines.append("  </url>")
+    # Report pages
+    for d in SITEMAP_DOMAINS:
+        lines.append('  <url>')
+        lines.append(f'    <loc>https://oti-labs.com/report/{d}</loc>')
+        lines.append(f'    <lastmod>{today}</lastmod>')
+        lines.append('    <changefreq>weekly</changefreq>')
+        lines.append('    <priority>0.7</priority>')
+        lines.append('  </url>')
+    lines.append('</urlset>')
+    return Response(content="\n".join(lines), media_type="application/xml")
+
+
+@app.api_route("/robots.txt", methods=["GET", "HEAD"], response_class=Response)
+async def robots():
+    """Robots.txt — allow all crawlers, point at the sitemap, disallow internal endpoints."""
+    body = (
+        "User-agent: *\n"
+        "Allow: /\n"
+        "Disallow: /metrics\n"
+        "Disallow: /demo/\n"
+        "\n"
+        "Sitemap: https://oti-labs.com/sitemap.xml\n"
+    )
+    return Response(content=body, media_type="text/plain")
