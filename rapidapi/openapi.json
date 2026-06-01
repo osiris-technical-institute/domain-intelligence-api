@@ -1,4 +1,4 @@
-{
+﻿{
   "openapi": "3.1.0",
   "info": {
     "title": "Domain Intelligence API",
@@ -43,11 +43,12 @@
     "/lookup/{domain}": {
       "get": {
         "summary": "Full Domain Intelligence Lookup",
-        "description": "Aggregate endpoint: returns DNS, SSL, WHOIS, subdomains, and email security in one parallel call. Most popular endpoint. Sub-lookups run concurrently; total wall time bounded by the slowest source (~1-5s uncached, ~50ms cached).",
+        "description": "Aggregate endpoint: returns DNS, SSL, WHOIS, subdomains, and email security in one parallel call. Most popular endpoint. Sub-lookups run concurrently; total wall time bounded by the slowest source (~1-5s uncached, ~50ms cached). Pass ?wait=1 to block (up to ~20s) for full subdomain background enrichment instead of the fast snapshot.",
         "operationId": "lookup_lookup__domain__get",
         "tags": ["Aggregate"],
         "parameters": [
-          { "name": "domain", "in": "path", "required": true, "schema": { "type": "string", "title": "Domain" } }
+          { "name": "domain", "in": "path", "required": true, "schema": { "type": "string", "title": "Domain" } },
+          { "name": "wait", "in": "query", "required": false, "schema": { "type": "integer", "enum": [0, 1], "default": 0, "title": "Wait" }, "description": "Set to 1 to block (up to ~20s) for full subdomain background enrichment before returning, instead of the fast snapshot." }
         ],
         "responses": {
           "200": { "description": "Successful Response", "content": { "application/json": { "schema": {} } } },
@@ -103,11 +104,12 @@
     "/domain/{domain}/subdomains": {
       "get": {
         "summary": "Subdomain Enumeration",
-        "description": "Enumerates subdomains via Certificate Transparency logs + passive DNS (crt.sh, certspotter, hackertarget, rapiddns, VirusTotal v3 — paginated) PLUS an always-on DNS bruteforce against a curated 773-word wordlist resolved (A + CNAME) across 8 anycast resolvers (Cloudflare, Google, Quad9, OpenDNS). The bruteforce runs every time — not just as fallback — so the response is never empty regardless of upstream status. Automatic wildcard-DNS detection skips brute-forcing on wildcard zones to avoid false positives. Reliable fast sources return within a ~3s soft deadline; slow stragglers (including an optional subfinder aggregation of 20+ more passive sources) finish in the background and enrich the cache for comprehensive coverage on the next lookup. Results are merged, deduplicated, and sorted. The sources_used array reports per-source status. The warnings field is coverage-aware: only populated when total found drops below 20 subdomains. Up to 1,000 results returned per request.",
+        "description": "Enumerates subdomains via Certificate Transparency logs + passive DNS (crt.sh, certspotter, hackertarget, rapiddns, VirusTotal v3 — paginated) PLUS an always-on DNS bruteforce against a curated 773-word wordlist resolved (A + CNAME) across 8 anycast resolvers (Cloudflare, Google, Quad9, OpenDNS). The bruteforce runs every time — not just as fallback — so the response is never empty regardless of upstream status. Automatic wildcard-DNS detection skips brute-forcing on wildcard zones to avoid false positives. By default the reliable fast sources return within a ~3s soft deadline; slow stragglers (including an optional subfinder aggregation of 20+ more passive sources) finish in the background and enrich the cache for comprehensive coverage on the next lookup. Pass ?wait=1 to block (up to ~20s) for the slow sources and get the fuller result in a single call instead of the fast snapshot. Results are merged, deduplicated, and sorted. The sources_used array reports a normalized per-source status (e.g. 'rapiddns: 18 found', 'crt.sh: enriching', 'hackertarget: rate-limited', 'crt.sh: unavailable'). The warnings field is coverage-aware: only populated when total found drops below 20 subdomains. Up to 1,000 results returned per request.",
         "operationId": "subs_only_domain__domain__subdomains_get",
         "tags": ["Subdomains"],
         "parameters": [
-          { "name": "domain", "in": "path", "required": true, "schema": { "type": "string", "title": "Domain" } }
+          { "name": "domain", "in": "path", "required": true, "schema": { "type": "string", "title": "Domain" } },
+          { "name": "wait", "in": "query", "required": false, "schema": { "type": "integer", "enum": [0, 1], "default": 0, "title": "Wait" }, "description": "Set to 1 to block (up to ~20s) for full background enrichment and return the complete result in one call, instead of the fast snapshot." }
         ],
         "responses": {
           "200": { "description": "Successful Response", "content": { "application/json": { "schema": {} } } },
