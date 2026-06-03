@@ -1,4 +1,4 @@
-# Domain Intelligence API
+﻿# Domain Intelligence API
 
 [![Live](https://img.shields.io/badge/API-live-brightgreen)](https://oti-labs.com/domain-intelligence-api)
 [![RapidAPI](https://img.shields.io/badge/RapidAPI-listed-2196f3)](https://rapidapi.com/osiris-technical-institute-osiris-technical-institute-default/api/domain-intelligence-api)
@@ -93,6 +93,8 @@ All endpoints accept the bare hostname as a path parameter (no scheme, no traili
   - **Wildcard detection:** before brute-forcing, three random labels are resolved; if the zone answers them it has a `*.domain` wildcard and the brute-force is skipped (it would otherwise return the entire wordlist as false positives). CT and passive-DNS sources still return the *real* subdomains.
   - **Optional subfinder enrichment:** if the [`subfinder`](https://github.com/projectdiscovery/subfinder) binary is installed, it runs as a background source aggregating 20+ more passive sources for comprehensive coverage; it gracefully no-ops (`subfinder skipped: not installed`) if absent.
   - **Fast-return + background enrichment:** reliable fast sources return within a ~3s soft deadline; slow stragglers (crt.sh, subfinder) keep running in the background and write the fuller result into the cache, so the next lookup of that domain is complete — *first lookup good, second lookup comprehensive*.
+  - **Live vs historical tiering:** the background pass resolves every discovered host (wildcard-aware) and returns a `live` array — each `{host, ip}` resolving *right now* — plus `live_count`, alongside the full `subdomains` list and total `count` (ordered live-first). This separates the actionable, currently-live attack surface from names only ever seen in CT logs / passive DNS.
+  - **Noise filtering:** high-cardinality shared-infrastructure subtrees (e.g. provider nameserver pools like `*.ns.cloudflare.com`) are collapsed into a `pools` summary; DKIM/DMARC records and syntactically-invalid hostnames are dropped at ingest.
   - Results merged, deduplicated, sorted. The `sources_used` array reports per-source status (contributed / rate-limited / failed / skipped). `warnings` is coverage-aware (only populated when total found drops below 20 subdomains).
 
 - **SSL:** Direct TLS handshake against the host — no third-party scanner, no rate limit, accurate certificate chain. 5s socket timeout.
