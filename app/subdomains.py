@@ -101,6 +101,16 @@ WAIT_DEADLINE = float(os.environ.get("SUBDOMAINS_WAIT_DEADLINE", "20.0"))
 # Warnings only appear when coverage is below this count
 LOW_COVERAGE_THRESHOLD = 20
 
+# --- Output quality: liveness tiering + shared-infra pool collapse ---
+# Liveness pass (runs in the background): resolve discovered hosts NOW and split
+# them into "live" (resolving) vs "historical" (seen in CT/passive, maybe dead).
+LIVENESS_BUDGET      = int(os.environ.get("SUBDOMAINS_LIVENESS_BUDGET", "5000"))  # max hosts resolved per lookup
+LIVENESS_CONCURRENCY = 150
+LIVE_CAP             = int(os.environ.get("SUBDOMAINS_LIVE_CAP", "2000"))          # max live hosts returned
+# Collapse high-cardinality shared-infrastructure pools (e.g. *.ns.cloudflare.com).
+POOL_MIN  = 40   # a deep sub-zone with >= this many descendants is treated as a pool
+POOL_KEEP = 3    # keep this many representative members visible
+
 OTX_KEY = os.environ.get("OTX_API_KEY", "").strip()
 VT_KEY  = os.environ.get("VT_API_KEY", "").strip()
 
@@ -252,6 +262,16 @@ _BRUTE_WORDLIST = [
 ]
 
 
+# A syntactically valid hostname: dot-separated labels of [a-z0-9-], no leading or
+# trailing hyphen per label. Drops passive-DNS junk — underscore service records
+# (_dmarc.*, *._domainkey.*), poisoned/garbage entries — that aren't real web hosts.
+_VALID_HOST_RE = re.compile(
+    r"^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$"
+)
+# Labels that mark email-authentication DNS records (not web hosts).
+_EMAIL_AUTH_LABELS = {"dkim", "domainkey", "dmarc"}
+
+
 def _add(out: set, candidate: str, domain: str) -> None:
     """Validate and add a candidate hostname to the result set."""
     if not candidate:
@@ -259,9 +279,13 @@ def _add(out: set, candidate: str, domain: str) -> None:
     n = candidate.strip().lower().rstrip(".")
     if not n or n.startswith("*"):
         return
-    if "@" in n or " " in n:
-        return
     if n != domain and not n.endswith("." + domain):
+        return
+    if not _VALID_HOST_RE.match(n):
+        return
+    # Drop email-authentication DNS records (DKIM/DMARC key hosts) — not web hosts;
+    # the dedicated email-security endpoint surfaces those instead.
+    if _EMAIL_AUTH_LABELS.intersection(n.split(".")):
         return
     out.add(n)
 
@@ -496,6 +520,113 @@ async def _resolve_one(resolver, name: str) -> Optional[str]:
     return None
 
 
+def _make_resolver():
+    """A dnspython async resolver spread across 8 anycast public resolvers (the same
+    pool the bruteforce uses) so sustained concurrency doesn't get throttled."""
+    import dns.asyncresolver
+    r = dns.asyncresolver.Resolver()
+    r.nameservers = [
+        "1.1.1.1", "1.0.0.1", "8.8.8.8", "8.8.4.4",
+        "9.9.9.9", "149.112.112.112", "208.67.222.222", "208.67.220.220",
+    ]
+    r.rotate = True
+    r.timeout = DNS_BRUTE_TIMEOUT
+    r.lifetime = DNS_BRUTE_TIMEOUT
+    return r
+
+
+async def _resolve_with_ip(resolver, name: str):
+    """Return (name, ip) if the host resolves right now, else None. ip is the first
+    A address, or the CNAME target for A-less CNAME hosts."""
+    try:
+        ans = await resolver.resolve(name, "A")
+        ips = sorted(str(a) for a in ans)
+        if ips:
+            return (name, ips[0])
+    except Exception:
+        pass
+    try:
+        ans = await resolver.resolve(name, "CNAME")
+        if len(ans):
+            return (name, str(ans[0].target).rstrip("."))
+    except Exception:
+        pass
+    return None
+
+
+async def _compute_liveness(domain: str, hosts) -> dict:
+    """Resolve up to LIVENESS_BUDGET discovered hosts NOW; return {host: ip} for the
+    ones that are genuinely live. Wildcard-aware: if the zone has a catch-all
+    wildcard (so every name "resolves"), hits pointing at the wildcard IP are NOT
+    counted as distinct live hosts — only names resolving to a different address
+    are. This is exactly what separates "live now" from "seen historically"."""
+    try:
+        import dns.asyncresolver  # noqa: F401
+    except ImportError:
+        return {}
+    import secrets
+    resolver = _make_resolver()
+    probes = [f"{secrets.token_hex(10)}-livecheck.{domain}" for _ in range(2)]
+    probe_res = await asyncio.gather(
+        *[_resolve_with_ip(resolver, p) for p in probes], return_exceptions=True
+    )
+    wildcard_ips = {r[1] for r in probe_res if isinstance(r, tuple) and r[1]}
+    targets = sorted(hosts)[:LIVENESS_BUDGET]
+    sem = asyncio.Semaphore(LIVENESS_CONCURRENCY)
+
+    async def check(h):
+        async with sem:
+            return await _resolve_with_ip(resolver, h)
+
+    results = await asyncio.gather(*[check(h) for h in targets], return_exceptions=True)
+    live: dict = {}
+    for r in results:
+        if isinstance(r, tuple) and r[1] and r[1] not in wildcard_ips:
+            live[r[0]] = r[1]
+    return live
+
+
+def _collapse_pools(domain: str, hosts) -> tuple:
+    """Collapse high-cardinality shared-infrastructure SUBTREES so the list isn't
+    front-loaded with infrastructure noise — e.g. Cloudflare's branded nameserver
+    namespace (aaron.ns.cloudflare.com AND x.kristina.ns.cloudflare.com, …). For any
+    sub-zone deeper than the domain with >= POOL_MIN descendants, the WHOLE subtree
+    collapses to a summary + a few representatives. Direct subdomains of the domain
+    are never collapsed. Returns (kept_hosts: list, pools: list[{zone,count}])."""
+    from collections import Counter
+    hosts = list(hosts)
+    dlabels = domain.count(".") + 1   # label count of the registered domain
+    # Tally descendants for every candidate pool-zone (ancestor zones deeper than the domain).
+    zone_count: Counter = Counter()
+    for h in hosts:
+        labels = h.split(".")
+        for i in range(1, len(labels) - dlabels):
+            zone_count[".".join(labels[i:])] += 1
+    # Choose pool roots shallowest-first, skipping zones already inside a chosen root,
+    # so a whole namespace (ns.cloudflare.com) collapses once at the top.
+    chosen: list = []
+    for zone, cnt in sorted(zone_count.items(), key=lambda kv: (kv[0].count("."), kv[0])):
+        if cnt < POOL_MIN:
+            continue
+        if any(zone == r or zone.endswith("." + r) for r in chosen):
+            continue
+        chosen.append(zone)
+    if not chosen:
+        return hosts, []
+    drop = set()
+    pools = []
+    for root in chosen:
+        children = sorted(h for h in hosts if h.endswith("." + root))
+        if len(children) < POOL_MIN:
+            continue
+        reps = set(children[:POOL_KEEP])
+        drop.update(c for c in children if c not in reps)
+        pools.append({"zone": "*." + root, "count": len(children)})
+    kept = [h for h in hosts if h not in drop]
+    pools.sort(key=lambda p: -p["count"])
+    return kept, pools
+
+
 async def _src_dns_bruteforce(domain: str, out: set) -> str:
     """Always-on DNS bruteforce against curated wordlist via public resolvers."""
     try:
@@ -579,11 +710,15 @@ def sources_enriching(sources_used) -> bool:
 
 
 def _assemble(domain: str, found: set, results_by_name: dict,
-              pending_names: list, limit: int) -> dict:
+              pending_names: list, limit: int,
+              live_map: Optional[dict] = None, liveness_pending: bool = False) -> dict:
     """Build the response dict from whatever sources have reported so far.
 
     results_by_name maps source-name -> result string OR Exception (completed).
-    pending_names lists sources still running (they'll be marked accordingly).
+    pending_names lists sources still running (marked accordingly).
+    live_map (optional): host -> resolved IP for hosts confirmed live NOW; when
+    present the output is tiered into `live` vs historical. liveness_pending marks
+    that the background liveness pass hasn't run yet (keeps consumers polling).
     """
     sources_used: list = []
     failed_msgs: list = []
@@ -599,6 +734,8 @@ def _assemble(domain: str, found: set, results_by_name: dict,
                 failed_msgs.append(_clean_source(res))
     for name in pending_names:
         sources_used.append(_clean_source(f"{name} pending"))
+    if liveness_pending:
+        sources_used.append("liveness: enriching")
 
     # Hard error only when nothing found, nothing still running, and ~all failed.
     if not found and not pending_names and len(failed_msgs) >= 5:
@@ -611,17 +748,36 @@ def _assemble(domain: str, found: set, results_by_name: dict,
             "returned": 0,
         }
 
-    subdomains = sorted(found)
-    returned = subdomains[:limit]
+    # Drop shared-infrastructure pool noise (e.g. *.ns.cloudflare.com).
+    clean_hosts, pools = _collapse_pools(domain, found)
+    total = len(clean_hosts)
+
+    # Tier into live (resolves now) vs historical when liveness is available, and
+    # order live-first so the capped/visible portion leads with the useful hosts.
+    if live_map is not None:
+        live_hosts = sorted(h for h in clean_hosts if h in live_map)
+        hist_hosts = sorted(h for h in clean_hosts if h not in live_map)
+        live_count = len(live_hosts)
+        ordered = live_hosts + hist_hosts
+    else:
+        live_hosts = []
+        live_count = None
+        ordered = sorted(clean_hosts)
+
+    returned = ordered[:limit]
     result = {
-        "count":        len(found),
+        "count":        total,
+        "live_count":   live_count,
         "returned":     len(returned),
         "subdomains":   returned,
         "sources_used": sources_used,
     }
+    if live_map is not None:
+        result["live"] = [{"host": h, "ip": live_map.get(h, "")} for h in live_hosts][:LIVE_CAP]
+    if pools:
+        result["pools"] = pools
     # Only surface warnings when coverage is genuinely low.
-    # A response with 200 subdomains + "hackertarget rate-limited" is fine; don't noise the consumer.
-    if len(found) < LOW_COVERAGE_THRESHOLD and failed_msgs:
+    if total < LOW_COVERAGE_THRESHOLD and failed_msgs:
         result["warnings"] = failed_msgs
     return result
 
@@ -629,22 +785,27 @@ def _assemble(domain: str, found: set, results_by_name: dict,
 async def _enrich_in_background(domain: str, found: set, results_by_name: dict,
                                 task_to_name: dict, pending: set, limit: int,
                                 client: httpx.AsyncClient) -> None:
-    """Await slow stragglers (e.g. crt.sh), then write the fuller result to the
-    subdomains cache so the next lookup of this domain is complete. Best-effort:
-    any failure here is non-fatal — the user already got their snapshot."""
+    """Await slow stragglers (e.g. crt.sh), run the liveness pass, then write the
+    full tiered result to the subdomains cache so the next lookup of this domain is
+    complete. Best-effort: any failure here is non-fatal — the user already got
+    their snapshot."""
     try:
-        await asyncio.wait(pending)
-        for t in pending:
-            name = task_to_name.get(t, "?")
-            try:
-                results_by_name[name] = t.result()
-            except Exception as exc:
-                results_by_name[name] = exc
-        full = _assemble(domain, found, results_by_name, [], limit)
+        if pending:
+            await asyncio.wait(pending)
+            for t in pending:
+                name = task_to_name.get(t, "?")
+                try:
+                    results_by_name[name] = t.result()
+                except Exception as exc:
+                    results_by_name[name] = exc
+        # Liveness pass over the full merged set -> live/historical tiers.
+        live_map = await _compute_liveness(domain, found)
+        full = _assemble(domain, found, results_by_name, [], limit, live_map=live_map)
         if "error" not in full:
             from app.cache import set_cached  # lazy import avoids any import cycle
             await set_cached("subdomains", domain, full)
-            log.info("subdomain_enrich_cached domain=%s count=%s", domain, full.get("count"))
+            log.info("subdomain_enrich_cached domain=%s count=%s live=%s",
+                     domain, full.get("count"), full.get("live_count"))
     except Exception as e:
         log.warning("subdomain_enrich_err domain=%s err=%s", domain, e)
     finally:
@@ -654,7 +815,7 @@ async def _enrich_in_background(domain: str, found: set, results_by_name: dict,
             pass
 
 
-async def get_subdomains(domain: str, limit: int = 1000, wait: bool = False) -> dict:
+async def get_subdomains(domain: str, limit: int = 2000, wait: bool = False) -> dict:
     """Discover subdomains for *domain* via concurrent multi-source aggregation.
 
     Runs the direct sources in parallel: crt.sh, certspotter, hackertarget,
@@ -718,15 +879,29 @@ async def get_subdomains(domain: str, limit: int = 1000, wait: bool = False) -> 
             results_by_name[name] = exc
 
     pending_names = [task_to_name[t] for t in pending]
-    snapshot = _assemble(domain, found, results_by_name, pending_names, limit)
 
-    if pending:
+    if wait:
+        # Opt-in complete mode: gather any remaining sources inline for full
+        # coverage now. Liveness tiers fill in the background and update the cache.
+        if pending:
+            await asyncio.wait(pending)
+            for t in list(pending):
+                nm = task_to_name.get(t, "?")
+                try:
+                    results_by_name[nm] = t.result()
+                except Exception as exc:
+                    results_by_name[nm] = exc
+            pending = set()
+        result = _assemble(domain, found, results_by_name, [], limit, liveness_pending=True)
         asyncio.ensure_future(
-            _enrich_in_background(
-                domain, found, results_by_name, task_to_name, pending, limit, client
-            )
+            _enrich_in_background(domain, found, results_by_name, task_to_name, set(), limit, client)
         )
-    else:
-        await client.aclose()
+        return result
 
+    snapshot = _assemble(domain, found, results_by_name, pending_names, limit, liveness_pending=True)
+    # Always enrich in the background — await any pending slow sources AND run the
+    # liveness pass — then cache the full tiered result. The page/poll self-heals.
+    asyncio.ensure_future(
+        _enrich_in_background(domain, found, results_by_name, task_to_name, pending, limit, client)
+    )
     return snapshot
