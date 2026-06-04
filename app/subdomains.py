@@ -815,7 +815,7 @@ async def _enrich_in_background(domain: str, found: set, results_by_name: dict,
             pass
 
 
-async def get_subdomains(domain: str, limit: int = 2000, wait: bool = False) -> dict:
+async def get_subdomains(domain: str, limit: int = 2000, wait: bool = False, wait_liveness: bool = False) -> dict:
     """Discover subdomains for *domain* via concurrent multi-source aggregation.
 
     Runs the direct sources in parallel: crt.sh, certspotter, hackertarget,
@@ -835,6 +835,8 @@ async def get_subdomains(domain: str, limit: int = 2000, wait: bool = False) -> 
     when the response is otherwise solid.
     """
     domain = domain.strip().lower().rstrip(".")
+    if wait_liveness:
+        wait = True   # liveness-inline (used by the monitoring cron) implies waiting for sources first
     found: set = set()
 
     # NOTE: the client is intentionally NOT created with `async with` — a
@@ -881,8 +883,7 @@ async def get_subdomains(domain: str, limit: int = 2000, wait: bool = False) -> 
     pending_names = [task_to_name[t] for t in pending]
 
     if wait:
-        # Opt-in complete mode: gather any remaining sources inline for full
-        # coverage now. Liveness tiers fill in the background and update the cache.
+        # Opt-in complete mode: gather any remaining sources inline for full coverage now.
         if pending:
             await asyncio.wait(pending)
             for t in list(pending):
@@ -892,6 +893,13 @@ async def get_subdomains(domain: str, limit: int = 2000, wait: bool = False) -> 
                 except Exception as exc:
                     results_by_name[nm] = exc
             pending = set()
+        if wait_liveness:
+            # Fully synchronous (monitoring cron): run the liveness pass inline and
+            # return the complete tiered result — no background task.
+            live_map = await _compute_liveness(domain, found)
+            await client.aclose()
+            return _assemble(domain, found, results_by_name, [], limit, live_map=live_map)
+        # Default ?wait=1: sources complete now; liveness tiers fill in the background.
         result = _assemble(domain, found, results_by_name, [], limit, liveness_pending=True)
         asyncio.ensure_future(
             _enrich_in_background(domain, found, results_by_name, task_to_name, set(), limit, client)
