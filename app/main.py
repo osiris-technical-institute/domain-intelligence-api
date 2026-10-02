@@ -12,9 +12,9 @@ from fastapi.responses import JSONResponse, Response, HTMLResponse
 from app.dns_lookup import get_dns_records
 from app.ssl_lookup import get_ssl_info
 from app.whois_lookup import get_whois
-from app.subdomains import get_subdomains
+from app.subdomains import get_subdomains, sources_enriching
 from app.email_security import get_email_security
-from app.cache import cached_call, get_client as get_redis
+from app.cache import cached_call, get_cached, set_cached, get_client as get_redis
 from app.metrics import (
     REQUEST_COUNT, REQUEST_LATENCY, CACHE_HITS, CACHE_MISSES, INFLIGHT, render as render_metrics,
 )
@@ -143,7 +143,7 @@ async def metrics():
 
 
 @app.get("/lookup/{domain}")
-async def lookup(domain: str):
+async def lookup(domain: str, wait: int = 0):
     d = _validate(domain)
     t0 = time.time()
 
@@ -153,8 +153,6 @@ async def lookup(domain: str):
         return await with_timeout("ssl", lambda: get_ssl_info(d))
     async def whois_fn():
         return await with_timeout("whois", lambda: get_whois(d))
-    async def subs_fn():
-        return await with_timeout("subdomains", lambda: get_subdomains(d))
     async def email_fn():
         return await with_timeout("email", lambda: get_email_security(d))
 
@@ -162,7 +160,7 @@ async def lookup(domain: str):
         _cached("dns", d, dns_fn),
         _cached("ssl", d, ssl_fn),
         _cached("whois", d, whois_fn),
-        _cached("subdomains", d, subs_fn),
+        _subdomains_value(d, bool(wait)),
         _cached("email", d, email_fn),
         return_exceptions=True,
     )
@@ -212,10 +210,32 @@ async def whois_only(domain: str):
     return val
 
 
+SUBS_WAIT_HARD_TIMEOUT = 25.0  # safety net over get_subdomains' internal WAIT_DEADLINE
+
+
+async def _subdomains_value(d: str, wait: bool):
+    """Return (subdomains_value, hit) for the subdomains namespace.
+
+    Fast path (wait=False) uses the normal namespace cache. wait=True returns a
+    cached COMPLETE result if one is present, otherwise blocks (up to ~25s) for a
+    fuller enumeration and caches it — it never returns a still-enriching snapshot."""
+    if not wait:
+        return await _cached("subdomains", d, lambda: with_timeout("subdomains", lambda: get_subdomains(d)))
+    cached = await get_cached("subdomains", d)
+    if isinstance(cached, dict) and not sources_enriching(cached.get("sources_used")):
+        CACHE_HITS.labels(namespace="subdomains").inc()
+        return cached, True
+    CACHE_MISSES.labels(namespace="subdomains").inc()
+    val = await asyncio.wait_for(get_subdomains(d, wait=True), timeout=SUBS_WAIT_HARD_TIMEOUT)
+    if not (isinstance(val, dict) and "error" in val):
+        await set_cached("subdomains", d, val)
+    return val, False
+
+
 @app.get("/domain/{domain}/subdomains")
-async def subs_only(domain: str):
+async def subs_only(domain: str, wait: int = 0):
     d = _validate(domain)
-    val, _ = await _cached("subdomains", d, lambda: with_timeout("subdomains", lambda: get_subdomains(d)))
+    val, _ = await _subdomains_value(d, bool(wait))
     return val
 
 
@@ -262,7 +282,7 @@ async def demo_lookup(domain: str, request: Request):
                 "error": "demo_rate_limit_exceeded",
                 "message": f"Demo limit is {DEMO_DAILY_LIMIT} req/IP/day. Subscribe on RapidAPI for full access.",
                 "retry_after_seconds": ttl,
-                "subscribe_url": "https://rapidapi.com/search/domain-intelligence",
+                "subscribe_url": "https://rapidapi.com/osiris-technical-institute-osiris-technical-institute-default/api/domain-intelligence-api/pricing",
             },
             headers={"Retry-After": str(ttl)},
         )
