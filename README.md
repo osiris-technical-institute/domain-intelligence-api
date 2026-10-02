@@ -1,29 +1,30 @@
-﻿# Domain Intelligence API
+# Domain Intelligence API
 
 [![Live](https://img.shields.io/badge/API-live-brightgreen)](https://oti-labs.com/domain-intelligence-api)
 [![RapidAPI](https://img.shields.io/badge/RapidAPI-listed-2196f3)](https://rapidapi.com/osiris-technical-institute-osiris-technical-institute-default/api/domain-intelligence-api)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](#self-hosting)
 
-> Aggregate domain reconnaissance — **DNS, WHOIS/RDAP, SSL/TLS, subdomains, and email security posture** — in a single REST call.
+> WHOIS/RDAP, DNS, SSL/TLS, subdomains and email security (SPF, DMARC, DKIM) for any domain, in one REST call.
 
-A FastAPI service that pulls five categories of public domain intelligence concurrently and returns clean, predictable JSON. Built for security teams, threat-intel enrichment pipelines, and domain monitoring SaaS. Sub-second responses on cache hits, no LLMs in the request path.
+A FastAPI service that runs the five lookups in parallel and returns one JSON object. Built and run in production by [Osiris Technical Institute](https://oti-labs.com).
 
-- **Live API:** <https://oti-labs.com/domain-intelligence-api>
-- **Pricing & API key:** [RapidAPI listing](https://rapidapi.com/osiris-technical-institute-osiris-technical-institute-default/api/domain-intelligence-api)
+- **Website and live demo:** <https://oti-labs.com/domain-intelligence-api>
+- **Free web report for any domain:** `https://oti-labs.com/report/{domain}`, e.g. <https://oti-labs.com/report/stripe.com>
+- **API key and pricing:** [RapidAPI listing](https://rapidapi.com/osiris-technical-institute-osiris-technical-institute-default/api/domain-intelligence-api)
 - **OpenAPI spec:** [`rapidapi/openapi.json`](rapidapi/openapi.json)
 
 ---
 
 ## Try it (no key needed)
 
-The landing page exposes a public demo, rate-limited to 5 requests per IP per day:
+The public demo returns the full aggregate result, limited to 5 requests per IP per day:
 
 ```bash
 curl -s https://oti-labs.com/demo/example.com | jq
 ```
 
-## Production usage (via RapidAPI)
+## Use it (RapidAPI key)
 
 ```bash
 curl -s "https://domain-intelligence-api.p.rapidapi.com/lookup/example.com" \
@@ -38,27 +39,24 @@ r = requests.get(
     "https://domain-intelligence-api.p.rapidapi.com/lookup/example.com",
     headers={
         "X-RapidAPI-Host": "domain-intelligence-api.p.rapidapi.com",
-        "X-RapidAPI-Key":  "YOUR_RAPIDAPI_KEY",
+        "X-RapidAPI-Key": "YOUR_RAPIDAPI_KEY",
     },
-    timeout=15,
+    timeout=30,
 )
 data = r.json()
-print(data["ssl"]["issuer"], data["whois"]["registrar"])
+print(data["whois"]["registrar"], data["ssl"]["days_until_expiry"], data["subdomains"]["count"])
 ```
 
 ```javascript
-// Node 18+ has built-in fetch — no import needed
-const res = await fetch(
-  "https://domain-intelligence-api.p.rapidapi.com/lookup/example.com",
-  { headers: {
-      "X-RapidAPI-Host": "domain-intelligence-api.p.rapidapi.com",
-      "X-RapidAPI-Key":  "YOUR_RAPIDAPI_KEY",
-  }},
-);
+// Node 18+ (built-in fetch)
+const res = await fetch("https://domain-intelligence-api.p.rapidapi.com/lookup/example.com", {
+  headers: {
+    "X-RapidAPI-Host": "domain-intelligence-api.p.rapidapi.com",
+    "X-RapidAPI-Key": "YOUR_RAPIDAPI_KEY",
+  },
+});
 const data = await res.json();
 ```
-
-Full OpenAPI spec: [`rapidapi/openapi.json`](rapidapi/openapi.json).
 
 ---
 
@@ -66,63 +64,70 @@ Full OpenAPI spec: [`rapidapi/openapi.json`](rapidapi/openapi.json).
 
 | Method | Path | Returns |
 |--------|------|---------|
-| `GET` | `/lookup/{domain}` | **Aggregate** — DNS + WHOIS + SSL + subdomains + email-security in one parallel call. The endpoint most users want. |
-| `GET` | `/domain/{d}/dns` | A, AAAA, MX, TXT, NS, CAA, SOA |
-| `GET` | `/domain/{d}/whois` | Registration data via a 4-tier fallback chain (RDAP → port-43 WHOIS) |
-| `GET` | `/domain/{d}/ssl` | Live TLS handshake — issuer, validity window, SAN list, key strength |
-| `GET` | `/domain/{d}/subdomains` | Multi-source enumeration — CT logs + passive DNS (crt.sh, certspotter, hackertarget, rapiddns, VirusTotal) + always-on DNS bruteforce with wildcard filtering, plus optional subfinder background enrichment |
-| `GET` | `/domain/{d}/email-security` | SPF + DMARC presence/records. DKIM keys auto-probed across ~29 common selectors (Google, Microsoft 365, Mailchimp, SendGrid, etc.). |
+| `GET` | `/lookup/{domain}` | All five sections below, fetched in parallel. Supports `?wait=1`. |
+| `GET` | `/domain/{domain}/whois` | Registrar, registration/update/expiry dates, nameservers, status codes, registry handle, `_source` |
+| `GET` | `/domain/{domain}/dns` | A, AAAA, MX, TXT, NS, CAA and SOA records (CNAME and PTR are not returned) |
+| `GET` | `/domain/{domain}/ssl` | Live TLS handshake: issuer, subject, validity dates, `days_until_expiry`, serial number, every SAN, signature algorithm |
+| `GET` | `/domain/{domain}/subdomains` | Subdomains from CT logs, passive DNS and DNS brute-force, with live hosts and their IPs separated from historical names. Supports `?wait=1`. |
+| `GET` | `/domain/{domain}/email-security` | SPF and DMARC presence and records, plus DKIM keys found by probing 29 common selectors |
 
-All endpoints accept the bare hostname as a path parameter (no scheme, no trailing slash). Punycode-encoded IDN domains are supported.
+Pass the bare hostname as the path parameter (no scheme, no path). Punycode (`xn--`) domains work. An invalid domain returns `400 {"detail": "invalid domain"}`.
+
+`/lookup` returns `domain`, `elapsed_ms`, `cached` (which sections came from cache) and the five sections `dns`, `ssl`, `whois`, `subdomains`, `email_security`. If one section fails, it comes back as an object with an `error` field and the rest of the response is unaffected. Full response schemas and real examples are in the [OpenAPI spec](rapidapi/openapi.json).
 
 ---
 
-## Why it's resilient
+## How each lookup works
 
-- **WHOIS — 4-tier fallback chain:**
-  1. `rdap.org` universal redirect (~4s timeout)
-  2. IANA RDAP bootstrap → authoritative TLD-specific RDAP server (bootstrap cached 24h)
-  3. Hardcoded RDAP base URLs for 22 common TLDs (.com, .net, .org, .info, .io, .ai, .app, .dev, .xyz, .me, .tv, .uk, .de, .eu, etc.) for resilience when the bootstrap is slow
-  4. **Port-43 socket WHOIS** with 50+ TLD-specific servers (all gTLDs plus 35+ ccTLDs incl. .fr, .nl, .au, .ca, .jp, .ru, .cn, .br, .es, .it, .ch, .at, .pl, .se, .no, .fi, .dk, .be, .ie, .nz, .za, .in, .kr, .sg, and more). For any TLD not pre-mapped, the client queries `whois.iana.org` and follows the `refer:` line.
+**WHOIS: 4-tier fallback.** The response's `_source` field names the tier that answered.
+1. `rdap.org` universal redirect
+2. IANA RDAP bootstrap, then the TLD's own RDAP server (bootstrap cached 24 h)
+3. Fixed RDAP base URLs for 22 common TLDs, in case the bootstrap is slow
+4. Port-43 socket WHOIS with 61 TLD-specific servers (all major gTLDs plus many ccTLDs without RDAP, such as .fr, .nl, .au, .ca, .jp, .ru, .cn, .br, .es, .it and .ch). For an unmapped TLD the client asks `whois.iana.org` and follows its referral.
 
-  Every tier has its own short timeout. The response includes a `_source` field naming which tier succeeded (e.g. `"rdap.org"`, `"port43:whois.verisign-grs.com"`).
+Registrant contact details are not returned. Some registries (for example .uk and .nl) redact most fields by policy.
 
-- **Subdomains — multi-source aggregation, structural floor, wildcard filtering, background enrichment:**
-  - **Direct sources** run concurrently for a fast cold response: crt.sh + certspotter (Certificate Transparency logs), hackertarget + rapiddns + VirusTotal v3 (passive DNS; VT paginated to ~120 results). Each has a split connect/read timeout so an unreachable host fails fast (2.5s connect) instead of gating the batch.
-  - **Always-on DNS bruteforce** against a curated 773-word wordlist, rotated across 8 anycast resolvers (Cloudflare, Google, Quad9, OpenDNS) at 100 concurrent / 1s per name, resolving A + CNAME. Runs *every time* — so the response is never empty regardless of upstream status.
-  - **Wildcard detection:** before brute-forcing, three random labels are resolved; if the zone answers them it has a `*.domain` wildcard and the brute-force is skipped (it would otherwise return the entire wordlist as false positives). CT and passive-DNS sources still return the *real* subdomains.
-  - **Optional subfinder enrichment:** if the [`subfinder`](https://github.com/projectdiscovery/subfinder) binary is installed, it runs as a background source aggregating 20+ more passive sources for comprehensive coverage; it gracefully no-ops (`subfinder skipped: not installed`) if absent.
-  - **Fast-return + background enrichment:** reliable fast sources return within a ~3s soft deadline; slow stragglers (crt.sh, subfinder) keep running in the background and write the fuller result into the cache, so the next lookup of that domain is complete — *first lookup good, second lookup comprehensive*.
-  - **Live vs historical tiering:** the background pass resolves every discovered host (wildcard-aware) and returns a `live` array — each `{host, ip}` resolving *right now* — plus `live_count`, alongside the full `subdomains` list and total `count` (ordered live-first). This separates the actionable, currently-live attack surface from names only ever seen in CT logs / passive DNS.
-  - **Noise filtering:** high-cardinality shared-infrastructure subtrees (e.g. provider nameserver pools like `*.ns.cloudflare.com`) are collapsed into a `pools` summary; DKIM/DMARC records and syntactically-invalid hostnames are dropped at ingest.
-  - Results merged, deduplicated, sorted. The `sources_used` array reports per-source status (contributed / rate-limited / failed / skipped). `warnings` is coverage-aware (only populated when total found drops below 20 subdomains).
+**DNS.** The seven record types are resolved in parallel through the server's resolver, each with a 3 s limit. Each type is an array of strings, empty when the domain has none.
 
-- **SSL:** Direct TLS handshake against the host — no third-party scanner, no rate limit, accurate certificate chain. 5s socket timeout.
+**SSL.** A direct TLS handshake on port 443 with a 5 s socket timeout, no third-party scanner. The certificate is returned even if it is expired, self-signed or issued for another name, so you see what is actually deployed. `signature_algorithm` is a name such as `ecdsa-with-SHA384`.
 
-- **All upstream calls** are timeout-bounded via `asyncio.wait_for` (DNS 5s, WHOIS 8s, SSL 8s, subdomains 10s, email 6s). The aggregate `/lookup` endpoint completes in ~1-5s uncached, ~50ms cached.
+**Subdomains.**
+- **Sources, run concurrently:** crt.sh and certspotter (certificate transparency logs); hackertarget, rapiddns and VirusTotal v3 (passive DNS; VirusTotal paginated to about 120 results); DNS brute-force with a 773-name wordlist across 8 public resolvers (Cloudflare, Google, Quad9, OpenDNS), resolving A and CNAME. Each HTTP source has a 2.5 s connect timeout so an unreachable host fails fast.
+- **Optional subfinder:** if the [`subfinder`](https://github.com/projectdiscovery/subfinder) binary is installed, it runs as a background source that adds 25+ more passive sources. If it is absent, `sources_used` shows `subfinder: skipped`.
+- **Wildcard detection:** three random labels are resolved first. If the zone answers them, brute-force is skipped so a `*.domain` wildcard can't flood the results; the CT and passive-DNS sources still run.
+- **Fast by default:** the response comes back after a ~3 s soft deadline. Slow sources keep running in the background and write the fuller result into the cache. `?wait=1` waits for every source (up to about 20 s) instead.
+- **Live vs historical:** a background pass resolves every discovered name (wildcard-aware) and adds `live`, a list of `{host, ip}` for names that resolve now (IP or CNAME target), and `live_count`. `subdomains` is ordered live-first. On a domain's first lookup this pass finishes after the response, so `live` appears in the cached result shortly after; until then `sources_used` includes `liveness: enriching`.
+- **Noise filtering:** large shared-infrastructure subtrees (for example `*.ns.cloudflare.com`) are collapsed into `pools` with a few representatives kept. DKIM/DMARC records and invalid hostnames are dropped.
+- **Output:** up to 2,000 names per response; `count` is always the full total. `sources_used` gives each source's status (`N found`, `enriching`, `rate-limited`, `unavailable`, `skipped`). `warnings` appears only when fewer than 20 names were found and some sources failed.
+
+No tool finds every subdomain; hosts that never appear in public data can't be discovered passively.
+
+**Email security.** SPF from the domain's TXT records, DMARC from `_dmarc.{domain}`, and DKIM by probing 29 selectors used by Google Workspace, Microsoft 365, Mailchimp, SendGrid, Postmark, Mandrill, Klaviyo, Mailgun and generic names. Records are returned raw; SPF and DMARC are not parsed. Custom or hash-based DKIM selectors (for example Amazon SES) can't be discovered this way. BIMI, MTA-STS and blocklist checks are not included.
+
+**Timeouts.** Each section has an overall limit: DNS 5 s, WHOIS 8 s, SSL 8 s, subdomains 10 s, email 6 s. A section that times out returns `{"error": "timeout", ...}`.
 
 ## Caching
 
-Redis-backed response cache with per-endpoint TTLs:
+Successful results are cached in Redis per section. Failed lookups are not cached.
 
-| Endpoint | TTL |
-|----------|-----|
+| Section | TTL |
+|---------|-----|
 | DNS | 5 min |
 | WHOIS | 1 hour |
 | SSL | 6 hours |
 | Subdomains | 24 hours |
 | Email security | 1 hour |
 
-## Pricing
+## Pricing (RapidAPI)
 
-| Plan | Price | Quota | Rate limit |
-|------|-------|-------|------------|
-| **BASIC** | Free | 1,000 req/mo | 10 rpm |
-| **PRO** | $9.99/mo | 50,000 req/mo | 60 rpm |
-| **ULTRA** | $39.99/mo | 500,000 req/mo | 300 rpm |
-| **MEGA** | $149.99/mo | 5,000,000 req/mo | 1,000 rpm |
+| Plan | Price | Requests / month | Rate limit | Overage |
+|------|-------|------------------|------------|---------|
+| **BASIC** | Free | 1,000 (hard limit) | 10 / min | none |
+| **PRO** | $9.99/mo | 50,000 | 60 / min | $0.0005 / request |
+| **ULTRA** | $39.99/mo | 500,000 | 300 / min | $0.0002 / request |
+| **MEGA** | $149.99/mo | 5,000,000 | 1,000 / min | $0.0001 / request |
 
-Subscribe via the [RapidAPI pricing page](https://rapidapi.com/osiris-technical-institute-osiris-technical-institute-default/api/domain-intelligence-api/pricing).
+Every plan includes every endpoint. Cached responses count toward the quota like fresh ones. RapidAPI also applies its own bandwidth fee above 10 GB a month. Subscribe on the [RapidAPI pricing page](https://rapidapi.com/osiris-technical-institute-osiris-technical-institute-default/api/domain-intelligence-api/pricing).
 
 ---
 
@@ -135,34 +140,39 @@ pip install -r requirements.txt
 uvicorn app.main:app --host 127.0.0.1 --port 8001
 ```
 
-The service expects Redis at `localhost:6379` (set `REDIS_URL` to override). For TLS termination behind a real domain, point Caddy or nginx at `127.0.0.1:8001`. To require an auth header, set `RAPIDAPI_PROXY_SECRET` and have your reverse proxy enforce `X-RapidAPI-Proxy-Secret` on inbound requests.
+Needs Redis; the default is `redis://127.0.0.1:6379/0`. Put Caddy or nginx in front for TLS. The included [`domain-intel.service`](domain-intel.service) is the systemd unit used in production.
 
-For the VirusTotal subdomain source, set `VT_API_KEY` in the environment (optional — it no-ops cleanly if absent). For **comprehensive** subdomain coverage, optionally install [`subfinder`](https://github.com/projectdiscovery/subfinder) on `PATH` (or point `SUBFINDER_BIN` at it); the service uses it as a background-enrichment source when present and skips it otherwise. The direct CT/passive-DNS sources + DNS bruteforce run regardless.
-
-The included [`domain-intel.service`](domain-intel.service) is a working systemd unit that mirrors the production deployment.
+| Variable | Purpose |
+|----------|---------|
+| `REDIS_URL` | Redis connection URL |
+| `RAPIDAPI_PROXY_SECRET` | If set, every non-public route requires a matching `X-RapidAPI-Proxy-Secret` header and returns `401` otherwise. Public routes: `/health`, `/metrics`, `/docs`, `/demo/*`, `/demo-preview/*`, `/report/*`, `/reports`, `/sitemap.xml`, `/robots.txt`. |
+| `VT_API_KEY` | Enables the VirusTotal subdomain source (skipped if unset) |
+| `SUBFINDER_BIN` | Path to the subfinder binary (default `/usr/local/bin/subfinder`; skipped if missing) |
+| `SUBDOMAINS_WAIT_DEADLINE` | How long `wait=True` waits for slow subdomain sources (default 20 s) |
+| `SUBDOMAINS_LIVENESS_BUDGET`, `SUBDOMAINS_LIVE_CAP` | Max names resolved in the liveness pass (5,000) and max live hosts returned (2,000) |
 
 ## Repo layout
 
 ```
-app/                  FastAPI service code
-  main.py             Routes, middleware, app wiring
-  cache.py            Redis cache layer
-  dns_lookup.py       DNS resolver (A, AAAA, MX, TXT, NS, CAA, SOA)
-  whois_lookup.py     4-tier WHOIS chain: rdap.org → IANA bootstrap → 22 hardcoded RDAP servers → port-43 socket WHOIS (50+ TLDs + IANA referral)
+app/
+  main.py             Routes, auth middleware, demo endpoint
+  cache.py            Redis cache (per-section TTLs; errors are not cached)
+  dns_lookup.py       A, AAAA, MX, TXT, NS, CAA, SOA
+  whois_lookup.py     rdap.org -> IANA bootstrap -> 22 RDAP servers -> port-43 WHOIS (61 servers + IANA referral)
   ssl_lookup.py       Live TLS handshake
-  subdomains.py       crt.sh, certspotter, hackertarget, rapiddns, VirusTotal, DNS bruteforce (773-word, wildcard detection) + optional subfinder background enrichment
-  email_security.py   SPF + DMARC + DKIM (auto-probed across ~29 common selectors)
-  report.py           SEO-indexable HTML report renderer (page-level cache, ?refresh=1 escape hatch)
-  seed_domains.py     Curated sitemap domain list + prewarm set
-  templates/          Jinja2 templates for the HTML report + reports index
-  metrics.py          Prometheus exporter
-  logging_config.py   Structured JSON logging
-  timeouts.py         asyncio.wait_for helpers
+  subdomains.py       CT logs, passive DNS, VirusTotal, DNS brute-force, optional subfinder, liveness, pools
+  email_security.py   SPF, DMARC, DKIM (29 selectors)
+  report.py           HTML report pages (/report/{domain}, /reports)
+  seed_domains.py     Domains listed in the sitemap and /reports
+  templates/          Jinja2 templates for the report pages
+  metrics.py          Prometheus metrics (/metrics)
+  logging_config.py   JSON logging
+  timeouts.py         Per-section timeouts
 rapidapi/
-  openapi.json        OpenAPI 3.0 spec
+  openapi.json        OpenAPI 3.1 spec
   terms.md            Terms of use
 domain-intel.service  systemd unit
-requirements.txt      Python deps
+requirements.txt      Python dependencies
 ```
 
 ## Terms of use
@@ -171,11 +181,4 @@ requirements.txt      Python deps
 
 ## License
 
-[MIT](LICENSE) — Copyright (c) 2026 Osiris Technical Institute.
-
----
-
-Built and maintained by [Osiris Technical Institute](https://oti-labs.com).
-
-
-
+[MIT](LICENSE). Copyright (c) 2026 Osiris Technical Institute.
