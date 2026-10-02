@@ -1,12 +1,18 @@
-﻿{
+{
   "openapi": "3.1.0",
   "info": {
     "title": "Domain Intelligence API",
-    "description": "Aggregate domain reconnaissance in a single API call — DNS, WHOIS/RDAP, SSL/TLS, subdomain enumeration via Certificate Transparency logs + passive DNS + always-on DNS bruteforce, and email security posture (SPF, DMARC, DKIM via common-selector probing). Sub-second on cache hits, no LLMs in the request path. Built for security teams, threat-intel enrichment, and domain monitoring SaaS.",
-    "version": "0.6.0",
+    "version": "0.7.0",
+    "description": "WHOIS/RDAP, DNS, SSL/TLS, subdomains and email security (SPF, DMARC, DKIM) for any domain, in one REST call. /lookup/{domain} runs all five lookups in parallel; each section is also its own endpoint. If one section fails it is returned as an object with an `error` field and the rest of the response is unaffected. Successful results are cached per section: DNS 5 min, WHOIS 1 h, SSL 6 h, subdomains 24 h, email security 1 h. Source code (MIT): https://github.com/osiris-technical-institute/domain-intelligence-api",
     "x-rapidapi-category": "Cybersecurity",
     "contact": {
-      "name": "Domain Intel API Support"
+      "name": "OTI Labs support",
+      "email": "support@oti-labs.com",
+      "url": "https://oti-labs.com/domain-intelligence-api"
+    },
+    "license": {
+      "name": "MIT",
+      "url": "https://github.com/osiris-technical-institute/domain-intelligence-api/blob/main/LICENSE"
     }
   },
   "servers": [
@@ -16,159 +22,1488 @@
     }
   ],
   "tags": [
-    { "name": "Aggregate", "description": "All-in-one domain intelligence" },
-    { "name": "DNS", "description": "DNS record lookups (A, AAAA, MX, TXT, NS, CAA, SOA)" },
-    { "name": "SSL", "description": "TLS/SSL certificate inspection via live handshake" },
-    { "name": "WHOIS", "description": "Domain registration data via 4-tier fallback chain (rdap.org -> IANA bootstrap -> 22 hardcoded RDAP servers -> port-43 socket WHOIS for 50+ TLDs)" },
-    { "name": "Subdomains", "description": "Subdomain discovery via Certificate Transparency logs + passive DNS (crt.sh, certspotter, hackertarget, rapiddns, VirusTotal) plus always-on DNS bruteforce with wildcard filtering and background enrichment for comprehensive coverage" },
-    { "name": "Email Security", "description": "SPF, DMARC, and DKIM (auto-discovered via ~29 common selectors)" },
-    { "name": "Demo", "description": "Public rate-limited demo endpoint" },
-    { "name": "Utility", "description": "Service utilities" }
+    {
+      "name": "Aggregate",
+      "description": "All five sections in one call"
+    },
+    {
+      "name": "WHOIS",
+      "description": "Registration data: rdap.org, IANA RDAP bootstrap, 22 fallback RDAP servers, then port-43 WHOIS for 61 TLDs plus IANA referral"
+    },
+    {
+      "name": "DNS",
+      "description": "A, AAAA, MX, TXT, NS, CAA and SOA records"
+    },
+    {
+      "name": "SSL",
+      "description": "Certificate details from a live TLS handshake"
+    },
+    {
+      "name": "Subdomains",
+      "description": "CT logs, passive DNS and DNS brute-force, with live hosts and IPs separated from historical names"
+    },
+    {
+      "name": "Email Security",
+      "description": "SPF, DMARC and DKIM (29 common selectors probed)"
+    },
+    {
+      "name": "Demo",
+      "description": "Public demo, 5 requests per IP per day, no key"
+    },
+    {
+      "name": "Utility",
+      "description": "Service status"
+    }
   ],
   "paths": {
-    "/health": {
-      "get": {
-        "summary": "Health Check",
-        "description": "Returns service status. No authentication required.",
-        "operationId": "health_health_get",
-        "tags": ["Utility"],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": { "application/json": { "schema": {} } }
-          }
-        }
-      }
-    },
     "/lookup/{domain}": {
       "get": {
-        "summary": "Full Domain Intelligence Lookup",
-        "description": "Aggregate endpoint: returns DNS, SSL, WHOIS, subdomains, and email security in one parallel call. Most popular endpoint. Sub-lookups run concurrently; total wall time bounded by the slowest source (~1-5s uncached, ~50ms cached). Pass ?wait=1 to block (up to ~20s) for full subdomain background enrichment instead of the fast snapshot.",
-        "operationId": "lookup_lookup__domain__get",
-        "tags": ["Aggregate"],
+        "summary": "Full domain lookup",
+        "description": "Returns WHOIS, DNS, SSL, subdomains and email security in one call, fetched in parallel. `cached` shows which sections came from cache. Typical time is 1 to 5 s uncached and well under a second when cached; with `wait=1` it can take up to about 20 s.",
+        "operationId": "lookup",
+        "tags": [
+          "Aggregate"
+        ],
         "parameters": [
-          { "name": "domain", "in": "path", "required": true, "schema": { "type": "string", "title": "Domain" } },
-          { "name": "wait", "in": "query", "required": false, "schema": { "type": "integer", "enum": [0, 1], "default": 0, "title": "Wait" }, "description": "Set to 1 to block (up to ~20s) for full subdomain background enrichment before returning, instead of the fast snapshot." }
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "description": "Bare hostname, e.g. example.com (no scheme or path). Punycode (xn--) is accepted.",
+            "schema": {
+              "type": "string",
+              "example": "stripe.com"
+            }
+          },
+          {
+            "name": "wait",
+            "in": "query",
+            "required": false,
+            "description": "Set to 1 to wait for every subdomain source to finish (up to about 20 s) instead of returning the fast result. The live/historical split is added by a background check and appears in the cached result shortly after a domain's first lookup.",
+            "schema": {
+              "type": "integer",
+              "enum": [
+                0,
+                1
+              ],
+              "default": 0
+            }
+          }
         ],
         "responses": {
-          "200": { "description": "Successful Response", "content": { "application/json": { "schema": {} } } },
-          "422": { "description": "Validation Error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HTTPValidationError" } } } }
-        }
-      }
-    },
-    "/domain/{domain}/dns": {
-      "get": {
-        "summary": "DNS Records",
-        "description": "Returns A, AAAA, MX, TXT, NS, CAA, and SOA records for the given domain. All record types resolved in parallel via the standard async resolver; per-record timeout ~5s.",
-        "operationId": "dns_only_domain__domain__dns_get",
-        "tags": ["DNS"],
-        "parameters": [
-          { "name": "domain", "in": "path", "required": true, "schema": { "type": "string", "title": "Domain" } }
-        ],
-        "responses": {
-          "200": { "description": "Successful Response", "content": { "application/json": { "schema": {} } } },
-          "422": { "description": "Validation Error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HTTPValidationError" } } } }
-        }
-      }
-    },
-    "/domain/{domain}/ssl": {
-      "get": {
-        "summary": "SSL/TLS Certificate Details",
-        "description": "Performs a live TLS handshake against the host (5s socket timeout) and returns issuer, subject, validity window, SAN list, days-until-expiry, signature algorithm, and key info. No third-party scanner.",
-        "operationId": "ssl_only_domain__domain__ssl_get",
-        "tags": ["SSL"],
-        "parameters": [
-          { "name": "domain", "in": "path", "required": true, "schema": { "type": "string", "title": "Domain" } }
-        ],
-        "responses": {
-          "200": { "description": "Successful Response", "content": { "application/json": { "schema": {} } } },
-          "422": { "description": "Validation Error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HTTPValidationError" } } } }
+          "200": {
+            "description": "Successful response (long arrays in the example are shortened)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LookupResponse"
+                },
+                "example": {
+                  "domain": "stripe.com",
+                  "elapsed_ms": 41,
+                  "cached": {
+                    "dns": true,
+                    "ssl": true,
+                    "whois": true,
+                    "subdomains": true,
+                    "email_security": true
+                  },
+                  "dns": {
+                    "A": [
+                      "198.137.150.231",
+                      "198.202.176.231"
+                    ],
+                    "AAAA": [],
+                    "MX": [
+                      "30 aspmx3.googlemail.com.",
+                      "30 aspmx2.googlemail.com.",
+                      "10 aspmx.l.google.com."
+                    ],
+                    "TXT": [
+                      "\"stripe-verification=82ce82470fb8324e19fa65abdb6fd370da5a8f90bba09712f259760f625d0790\"",
+                      "\"vercel-domain-verification-0x8270=XezzJjJYrYZwY6CahDneh2ruB\"",
+                      "\"google-site-verification=ZgGi2-xDdfnaWxdfjn5AqtUS11jKWqSXAV_EHODFzdE\""
+                    ],
+                    "NS": [
+                      "ns-1087.awsdns-07.org.",
+                      "ns-705.awsdns-24.net.",
+                      "ns-1882.awsdns-43.co.uk."
+                    ],
+                    "CAA": [
+                      "0 issue \"digicert.com\"",
+                      "0 iodef \"mailto:caa-violations@stripe.com\"",
+                      "0 issue \"visa.com\""
+                    ],
+                    "SOA": [
+                      "ns-1882.awsdns-43.co.uk. awsdns-hostmaster.amazon.com. 1 900 900 1209600 3600"
+                    ]
+                  },
+                  "ssl": {
+                    "issuer": "CN=DigiCert G5 TLS ECC SHA384 2021 CA1,O=DigiCert\\, Inc.,C=US",
+                    "subject": "CN=stripe.com,O=Stripe\\, LLC,L=South San Francisco,ST=California,C=US,2.5.4.5=4675506,2.5.4.15=Private Organization,1.3.6.1.4.1.311.60.2.1.2=Delaware,1.3.6.1.4.1.311.60.2.1.3=US",
+                    "valid_from": "2026-09-24T00:00:00+00:00",
+                    "valid_to": "2026-12-10T23:59:59+00:00",
+                    "days_until_expiry": 69,
+                    "serial_number": "1939952089730671370756115214599670534",
+                    "sans": [
+                      "stripe.com",
+                      "www.stripe.com"
+                    ],
+                    "signature_algorithm": "ecdsa-with-SHA384"
+                  },
+                  "whois": {
+                    "handle": "891022_DOMAIN_COM-VRSN",
+                    "ldhName": "STRIPE.COM",
+                    "status": [
+                      "client delete prohibited",
+                      "client transfer prohibited",
+                      "client update prohibited",
+                      "server delete prohibited",
+                      "server transfer prohibited",
+                      "server update prohibited"
+                    ],
+                    "registrar": "SafeNames Ltd.",
+                    "created": "1995-09-12T04:00:00Z",
+                    "updated": "2025-10-01T01:39:51Z",
+                    "expires": "2027-09-11T04:00:00Z",
+                    "nameservers": [
+                      "NS-1087.AWSDNS-07.ORG",
+                      "NS-1882.AWSDNS-43.CO.UK",
+                      "NS-423.AWSDNS-52.COM",
+                      "NS-705.AWSDNS-24.NET"
+                    ],
+                    "_source": "rdap.org"
+                  },
+                  "subdomains": {
+                    "count": 458,
+                    "live_count": 264,
+                    "returned": 458,
+                    "subdomains": [
+                      "58.email.stripe.com",
+                      "59.email.stripe.com",
+                      "access.stripe.com",
+                      "acp.stripe.com"
+                    ],
+                    "live": [
+                      {
+                        "host": "58.email.stripe.com",
+                        "ip": "13.224.202.101"
+                      },
+                      {
+                        "host": "59.email.stripe.com",
+                        "ip": "13.35.107.110"
+                      },
+                      {
+                        "host": "access.stripe.com",
+                        "ip": "198.137.150.41"
+                      }
+                    ],
+                    "sources_used": [
+                      "crt.sh: unavailable",
+                      "dns-brute: 28 found",
+                      "hackertarget: rate-limited",
+                      "rapiddns: 44 found",
+                      "certspotter: 63 found",
+                      "virustotal: 240 found",
+                      "subfinder: 218 found"
+                    ],
+                    "pools": []
+                  },
+                  "email_security": {
+                    "spf": {
+                      "present": true,
+                      "records": [
+                        "v=spf1 ip4:198.2.180.60/32 ip4:13.111.2.227/32 include:spf1.stripe.com include:greenhouse-outbound-mail.stripe.com include:_spf.qualtrics.com ~all"
+                      ]
+                    },
+                    "dmarc": {
+                      "present": true,
+                      "records": [
+                        "v=DMARC1; p=reject; pct=100; fo=1; rua=mailto:dmarc-reports@stripe.com; ruf=mailto:dmarc-forensics@stripe.com;"
+                      ]
+                    },
+                    "dkim": {
+                      "found": [
+                        "google",
+                        "s1",
+                        "s2",
+                        "mandrill",
+                        "intercom",
+                        "m1"
+                      ],
+                      "records": [
+                        {
+                          "selector": "google",
+                          "records": [
+                            "v=DKIM1; k=rsa; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC4T1…"
+                          ]
+                        }
+                      ],
+                      "note": "Probed common selectors (Google, Microsoft 365, Mailchimp, SendGrid, etc.). Custom or hash-based selectors aren't auto-discoverable."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid domain",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPError"
+                },
+                "example": {
+                  "detail": "invalid domain"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid query parameter",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
         }
       }
     },
     "/domain/{domain}/whois": {
       "get": {
-        "summary": "WHOIS / RDAP Registration Data",
-        "description": "Registration data via a 4-tier fallback chain: (1) rdap.org universal redirect, (2) IANA RDAP bootstrap -> authoritative TLD-specific RDAP server, (3) hardcoded RDAP base URLs for 22 common TLDs, (4) port-43 socket WHOIS with 50+ TLD-specific servers (all gTLDs plus 35+ ccTLDs incl. .fr, .nl, .au, .ca, .jp, .ru, .cn, .br, .es, .it, .ch, .at, .pl, .se, .no, .fi, .dk, .be, .ie, .nz, .za, .in, .kr, .sg, and more), with IANA referral lookup for any TLD not pre-mapped. Response includes a _source field indicating which tier succeeded (e.g. 'rdap.org', 'iana-bootstrap:...', 'fallback:...', 'port43:whois.verisign-grs.com').",
-        "operationId": "whois_only_domain__domain__whois_get",
-        "tags": ["WHOIS"],
+        "summary": "WHOIS / RDAP registration data",
+        "description": "Tries rdap.org, then the IANA RDAP bootstrap and the TLD's RDAP server, then 22 fixed RDAP servers, then port-43 WHOIS (61 TLD-specific servers, many ccTLDs without RDAP, IANA referral for unmapped TLDs). `_source` names the tier that answered. Registrant contact details are not returned; some registries (.uk, .nl) redact most fields by policy. Cached 1 h.",
+        "operationId": "whois",
+        "tags": [
+          "WHOIS"
+        ],
         "parameters": [
-          { "name": "domain", "in": "path", "required": true, "schema": { "type": "string", "title": "Domain" } }
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "description": "Bare hostname, e.g. example.com (no scheme or path). Punycode (xn--) is accepted.",
+            "schema": {
+              "type": "string",
+              "example": "stripe.com"
+            }
+          }
         ],
         "responses": {
-          "200": { "description": "Successful Response", "content": { "application/json": { "schema": {} } } },
-          "422": { "description": "Validation Error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HTTPValidationError" } } } }
+          "200": {
+            "description": "Successful response (long arrays in the example are shortened)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/Whois"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SectionError"
+                    }
+                  ]
+                },
+                "example": {
+                  "handle": "891022_DOMAIN_COM-VRSN",
+                  "ldhName": "STRIPE.COM",
+                  "status": [
+                    "client delete prohibited",
+                    "client transfer prohibited",
+                    "client update prohibited",
+                    "server delete prohibited",
+                    "server transfer prohibited",
+                    "server update prohibited"
+                  ],
+                  "registrar": "SafeNames Ltd.",
+                  "created": "1995-09-12T04:00:00Z",
+                  "updated": "2025-10-01T01:39:51Z",
+                  "expires": "2027-09-11T04:00:00Z",
+                  "nameservers": [
+                    "NS-1087.AWSDNS-07.ORG",
+                    "NS-1882.AWSDNS-43.CO.UK",
+                    "NS-423.AWSDNS-52.COM",
+                    "NS-705.AWSDNS-24.NET"
+                  ],
+                  "_source": "rdap.org"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid domain",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPError"
+                },
+                "example": {
+                  "detail": "invalid domain"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/domain/{domain}/dns": {
+      "get": {
+        "summary": "DNS records",
+        "description": "A, AAAA, MX, TXT, NS, CAA and SOA, resolved in parallel (3 s per record type). Each type is an array of strings, empty when the domain has none. CNAME and PTR are not returned. Cached 5 min.",
+        "operationId": "dns",
+        "tags": [
+          "DNS"
+        ],
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "description": "Bare hostname, e.g. example.com (no scheme or path). Punycode (xn--) is accepted.",
+            "schema": {
+              "type": "string",
+              "example": "stripe.com"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response (long arrays in the example are shortened)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/DNSRecords"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SectionError"
+                    }
+                  ]
+                },
+                "example": {
+                  "A": [
+                    "198.137.150.231",
+                    "198.202.176.231"
+                  ],
+                  "AAAA": [],
+                  "MX": [
+                    "30 aspmx3.googlemail.com.",
+                    "30 aspmx2.googlemail.com.",
+                    "10 aspmx.l.google.com."
+                  ],
+                  "TXT": [
+                    "\"stripe-verification=82ce82470fb8324e19fa65abdb6fd370da5a8f90bba09712f259760f625d0790\"",
+                    "\"vercel-domain-verification-0x8270=XezzJjJYrYZwY6CahDneh2ruB\"",
+                    "\"google-site-verification=ZgGi2-xDdfnaWxdfjn5AqtUS11jKWqSXAV_EHODFzdE\""
+                  ],
+                  "NS": [
+                    "ns-1087.awsdns-07.org.",
+                    "ns-705.awsdns-24.net.",
+                    "ns-1882.awsdns-43.co.uk."
+                  ],
+                  "CAA": [
+                    "0 issue \"digicert.com\"",
+                    "0 iodef \"mailto:caa-violations@stripe.com\"",
+                    "0 issue \"visa.com\""
+                  ],
+                  "SOA": [
+                    "ns-1882.awsdns-43.co.uk. awsdns-hostmaster.amazon.com. 1 900 900 1209600 3600"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid domain",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPError"
+                },
+                "example": {
+                  "detail": "invalid domain"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/domain/{domain}/ssl": {
+      "get": {
+        "summary": "SSL/TLS certificate",
+        "description": "Live TLS handshake on port 443 (5 s timeout), no third-party scanner. The certificate is returned even if it is expired, self-signed or issued for another name; the chain is not validated. Cached 6 h.",
+        "operationId": "ssl",
+        "tags": [
+          "SSL"
+        ],
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "description": "Bare hostname, e.g. example.com (no scheme or path). Punycode (xn--) is accepted.",
+            "schema": {
+              "type": "string",
+              "example": "stripe.com"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response (long arrays in the example are shortened)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/SSLCertificate"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SectionError"
+                    }
+                  ]
+                },
+                "example": {
+                  "issuer": "CN=DigiCert G5 TLS ECC SHA384 2021 CA1,O=DigiCert\\, Inc.,C=US",
+                  "subject": "CN=stripe.com,O=Stripe\\, LLC,L=South San Francisco,ST=California,C=US,2.5.4.5=4675506,2.5.4.15=Private Organization,1.3.6.1.4.1.311.60.2.1.2=Delaware,1.3.6.1.4.1.311.60.2.1.3=US",
+                  "valid_from": "2026-09-24T00:00:00+00:00",
+                  "valid_to": "2026-12-10T23:59:59+00:00",
+                  "days_until_expiry": 69,
+                  "serial_number": "1939952089730671370756115214599670534",
+                  "sans": [
+                    "stripe.com",
+                    "www.stripe.com"
+                  ],
+                  "signature_algorithm": "ecdsa-with-SHA384"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid domain",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPError"
+                },
+                "example": {
+                  "detail": "invalid domain"
+                }
+              }
+            }
+          }
         }
       }
     },
     "/domain/{domain}/subdomains": {
       "get": {
-        "summary": "Subdomain Enumeration",
-        "description": "Enumerates subdomains via Certificate Transparency logs + passive DNS (crt.sh, certspotter, hackertarget, rapiddns, VirusTotal v3 — paginated) PLUS an always-on DNS bruteforce against a curated 773-word wordlist resolved (A + CNAME) across 8 anycast resolvers (Cloudflare, Google, Quad9, OpenDNS). The bruteforce runs every time — not just as fallback — so the response is never empty regardless of upstream status. Automatic wildcard-DNS detection skips brute-forcing on wildcard zones to avoid false positives. By default the reliable fast sources return within a ~3s soft deadline; slow stragglers (including an optional subfinder aggregation of 20+ more passive sources) finish in the background and enrich the cache for comprehensive coverage on the next lookup. Pass ?wait=1 to block (up to ~20s) for the slow sources and get the fuller result in a single call instead of the fast snapshot. Results are tiered: a background pass resolves the discovered hosts and returns a `live` array (`{host, ip}` for hosts resolving right now) plus `live_count`, alongside the full `subdomains` list and total `count`, ordered live-first. High-cardinality shared-infrastructure subtrees (e.g. nameserver pools) are collapsed into a `pools` summary, and DKIM/DMARC and invalid-syntax hostnames are filtered. Results are merged, deduplicated, and sorted. The sources_used array reports a normalized per-source status (e.g. 'rapiddns: 18 found', 'crt.sh: enriching', 'hackertarget: rate-limited', 'crt.sh: unavailable'). The warnings field is coverage-aware: only populated when total found drops below 20 subdomains. Up to 1,000 results returned per request.",
-        "operationId": "subs_only_domain__domain__subdomains_get",
-        "tags": ["Subdomains"],
+        "summary": "Subdomain enumeration",
+        "description": "Sources run concurrently: crt.sh and certspotter (CT logs), hackertarget, rapiddns and VirusTotal (passive DNS), DNS brute-force with a 773-name wordlist across 8 public resolvers, and subfinder (25+ passive sources) in the background. Wildcard DNS is detected and brute-force is skipped on wildcard zones. By default the response returns after about 3 s and slow sources finish in the background, filling the cache; `wait=1` waits for every source. Every name is resolved again: `live` lists names that resolve now with their IP or CNAME target, ordered first in `subdomains`. Large shared-infrastructure subtrees are collapsed into `pools`. Up to 2,000 names per response; `count` is the full total. Cached 24 h.",
+        "operationId": "subdomains",
+        "tags": [
+          "Subdomains"
+        ],
         "parameters": [
-          { "name": "domain", "in": "path", "required": true, "schema": { "type": "string", "title": "Domain" } },
-          { "name": "wait", "in": "query", "required": false, "schema": { "type": "integer", "enum": [0, 1], "default": 0, "title": "Wait" }, "description": "Set to 1 to block (up to ~20s) for full background enrichment and return the complete result in one call, instead of the fast snapshot." }
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "description": "Bare hostname, e.g. example.com (no scheme or path). Punycode (xn--) is accepted.",
+            "schema": {
+              "type": "string",
+              "example": "stripe.com"
+            }
+          },
+          {
+            "name": "wait",
+            "in": "query",
+            "required": false,
+            "description": "Set to 1 to wait for every subdomain source to finish (up to about 20 s) instead of returning the fast result. The live/historical split is added by a background check and appears in the cached result shortly after a domain's first lookup.",
+            "schema": {
+              "type": "integer",
+              "enum": [
+                0,
+                1
+              ],
+              "default": 0
+            }
+          }
         ],
         "responses": {
-          "200": { "description": "Successful Response", "content": { "application/json": { "schema": {} } } },
-          "422": { "description": "Validation Error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HTTPValidationError" } } } }
+          "200": {
+            "description": "Successful response (long arrays in the example are shortened)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/Subdomains"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SectionError"
+                    }
+                  ]
+                },
+                "example": {
+                  "count": 458,
+                  "live_count": 264,
+                  "returned": 458,
+                  "subdomains": [
+                    "58.email.stripe.com",
+                    "59.email.stripe.com",
+                    "access.stripe.com",
+                    "acp.stripe.com"
+                  ],
+                  "live": [
+                    {
+                      "host": "58.email.stripe.com",
+                      "ip": "13.224.202.101"
+                    },
+                    {
+                      "host": "59.email.stripe.com",
+                      "ip": "13.35.107.110"
+                    },
+                    {
+                      "host": "access.stripe.com",
+                      "ip": "198.137.150.41"
+                    }
+                  ],
+                  "sources_used": [
+                    "crt.sh: unavailable",
+                    "dns-brute: 28 found",
+                    "hackertarget: rate-limited",
+                    "rapiddns: 44 found",
+                    "certspotter: 63 found",
+                    "virustotal: 240 found",
+                    "subfinder: 218 found"
+                  ],
+                  "pools": []
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid domain",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPError"
+                },
+                "example": {
+                  "detail": "invalid domain"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid query parameter",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
         }
       }
     },
     "/domain/{domain}/email-security": {
       "get": {
-        "summary": "Email Security Posture",
-        "description": "Returns SPF, DMARC, and DKIM posture (presence + records). DKIM keys are auto-discovered by probing ~29 common selectors used by major mail providers (Google Workspace, Microsoft 365, Mailchimp, SendGrid, Postmark, Mandrill, Klaviyo, Mailgun, etc.) plus generic catchalls. Custom or hash-based selectors (e.g. Amazon SES) aren't auto-discoverable.",
-        "operationId": "email_only_domain__domain__email_security_get",
-        "tags": ["Email Security"],
+        "summary": "Email security (SPF, DMARC, DKIM)",
+        "description": "SPF from the domain's TXT records, DMARC from _dmarc.{domain}, and DKIM keys found by probing 29 common selectors (Google Workspace, Microsoft 365, Mailchimp, SendGrid, Postmark, Mandrill, Klaviyo, Mailgun and generic names). Records are returned raw, not parsed. Custom or hash-based DKIM selectors can't be discovered. BIMI, MTA-STS and blocklist checks are not included. Cached 1 h.",
+        "operationId": "email_security",
+        "tags": [
+          "Email Security"
+        ],
         "parameters": [
-          { "name": "domain", "in": "path", "required": true, "schema": { "type": "string", "title": "Domain" } }
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "description": "Bare hostname, e.g. example.com (no scheme or path). Punycode (xn--) is accepted.",
+            "schema": {
+              "type": "string",
+              "example": "stripe.com"
+            }
+          }
         ],
         "responses": {
-          "200": { "description": "Successful Response", "content": { "application/json": { "schema": {} } } },
-          "422": { "description": "Validation Error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HTTPValidationError" } } } }
+          "200": {
+            "description": "Successful response (long arrays in the example are shortened)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/EmailSecurity"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SectionError"
+                    }
+                  ]
+                },
+                "example": {
+                  "spf": {
+                    "present": true,
+                    "records": [
+                      "v=spf1 ip4:198.2.180.60/32 ip4:13.111.2.227/32 include:spf1.stripe.com include:greenhouse-outbound-mail.stripe.com include:_spf.qualtrics.com ~all"
+                    ]
+                  },
+                  "dmarc": {
+                    "present": true,
+                    "records": [
+                      "v=DMARC1; p=reject; pct=100; fo=1; rua=mailto:dmarc-reports@stripe.com; ruf=mailto:dmarc-forensics@stripe.com;"
+                    ]
+                  },
+                  "dkim": {
+                    "found": [
+                      "google",
+                      "s1",
+                      "s2",
+                      "mandrill",
+                      "intercom",
+                      "m1"
+                    ],
+                    "records": [
+                      {
+                        "selector": "google",
+                        "records": [
+                          "v=DKIM1; k=rsa; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC4T1…"
+                        ]
+                      }
+                    ],
+                    "note": "Probed common selectors (Google, Microsoft 365, Mailchimp, SendGrid, etc.). Custom or hash-based selectors aren't auto-discoverable."
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid domain",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPError"
+                },
+                "example": {
+                  "detail": "invalid domain"
+                }
+              }
+            }
+          }
         }
       }
     },
     "/demo/{domain}": {
       "get": {
-        "summary": "Public Demo Lookup",
-        "description": "Public demo of the aggregate endpoint. Rate-limited to 5 requests per IP per day. No authentication required.",
-        "operationId": "demo_lookup_demo__domain__get",
-        "tags": ["Demo"],
+        "summary": "Public demo lookup",
+        "description": "Same data as /lookup/{domain} without a key, limited to 5 requests per IP per day.",
+        "operationId": "demo",
+        "tags": [
+          "Demo"
+        ],
         "parameters": [
-          { "name": "domain", "in": "path", "required": true, "schema": { "type": "string", "title": "Domain" } }
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "description": "Bare hostname, e.g. example.com (no scheme or path). Punycode (xn--) is accepted.",
+            "schema": {
+              "type": "string",
+              "example": "stripe.com"
+            }
+          }
         ],
         "responses": {
-          "200": { "description": "Successful Response", "content": { "application/json": { "schema": {} } } },
-          "422": { "description": "Validation Error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HTTPValidationError" } } } }
+          "200": {
+            "description": "Successful response (long arrays in the example are shortened)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DemoResponse"
+                },
+                "example": {
+                  "domain": "stripe.com",
+                  "demo_meta": {
+                    "requests_used_today": 1,
+                    "daily_limit": 5,
+                    "requests_remaining": 4,
+                    "note": "Public demo. Subscribe on RapidAPI for more free usage."
+                  },
+                  "dns": {
+                    "A": [
+                      "198.137.150.231",
+                      "198.202.176.231"
+                    ],
+                    "AAAA": [],
+                    "MX": [
+                      "30 aspmx3.googlemail.com.",
+                      "30 aspmx2.googlemail.com.",
+                      "10 aspmx.l.google.com."
+                    ],
+                    "TXT": [
+                      "\"stripe-verification=82ce82470fb8324e19fa65abdb6fd370da5a8f90bba09712f259760f625d0790\"",
+                      "\"vercel-domain-verification-0x8270=XezzJjJYrYZwY6CahDneh2ruB\"",
+                      "\"google-site-verification=ZgGi2-xDdfnaWxdfjn5AqtUS11jKWqSXAV_EHODFzdE\""
+                    ],
+                    "NS": [
+                      "ns-1087.awsdns-07.org.",
+                      "ns-705.awsdns-24.net.",
+                      "ns-1882.awsdns-43.co.uk."
+                    ],
+                    "CAA": [
+                      "0 issue \"digicert.com\"",
+                      "0 iodef \"mailto:caa-violations@stripe.com\"",
+                      "0 issue \"visa.com\""
+                    ],
+                    "SOA": [
+                      "ns-1882.awsdns-43.co.uk. awsdns-hostmaster.amazon.com. 1 900 900 1209600 3600"
+                    ]
+                  },
+                  "ssl": {
+                    "issuer": "CN=DigiCert G5 TLS ECC SHA384 2021 CA1,O=DigiCert\\, Inc.,C=US",
+                    "subject": "CN=stripe.com,O=Stripe\\, LLC,L=South San Francisco,ST=California,C=US,2.5.4.5=4675506,2.5.4.15=Private Organization,1.3.6.1.4.1.311.60.2.1.2=Delaware,1.3.6.1.4.1.311.60.2.1.3=US",
+                    "valid_from": "2026-09-24T00:00:00+00:00",
+                    "valid_to": "2026-12-10T23:59:59+00:00",
+                    "days_until_expiry": 69,
+                    "serial_number": "1939952089730671370756115214599670534",
+                    "sans": [
+                      "stripe.com",
+                      "www.stripe.com"
+                    ],
+                    "signature_algorithm": "ecdsa-with-SHA384"
+                  },
+                  "whois": {
+                    "handle": "891022_DOMAIN_COM-VRSN",
+                    "ldhName": "STRIPE.COM",
+                    "status": [
+                      "client delete prohibited",
+                      "client transfer prohibited",
+                      "client update prohibited",
+                      "server delete prohibited",
+                      "server transfer prohibited",
+                      "server update prohibited"
+                    ],
+                    "registrar": "SafeNames Ltd.",
+                    "created": "1995-09-12T04:00:00Z",
+                    "updated": "2025-10-01T01:39:51Z",
+                    "expires": "2027-09-11T04:00:00Z",
+                    "nameservers": [
+                      "NS-1087.AWSDNS-07.ORG",
+                      "NS-1882.AWSDNS-43.CO.UK",
+                      "NS-423.AWSDNS-52.COM",
+                      "NS-705.AWSDNS-24.NET"
+                    ],
+                    "_source": "rdap.org"
+                  },
+                  "subdomains": {
+                    "count": 458,
+                    "live_count": 264,
+                    "returned": 458,
+                    "subdomains": [
+                      "58.email.stripe.com",
+                      "59.email.stripe.com",
+                      "access.stripe.com",
+                      "acp.stripe.com"
+                    ],
+                    "live": [
+                      {
+                        "host": "58.email.stripe.com",
+                        "ip": "13.224.202.101"
+                      },
+                      {
+                        "host": "59.email.stripe.com",
+                        "ip": "13.35.107.110"
+                      },
+                      {
+                        "host": "access.stripe.com",
+                        "ip": "198.137.150.41"
+                      }
+                    ],
+                    "sources_used": [
+                      "crt.sh: unavailable",
+                      "dns-brute: 28 found",
+                      "hackertarget: rate-limited",
+                      "rapiddns: 44 found",
+                      "certspotter: 63 found",
+                      "virustotal: 240 found",
+                      "subfinder: 218 found"
+                    ],
+                    "pools": []
+                  },
+                  "email_security": {
+                    "spf": {
+                      "present": true,
+                      "records": [
+                        "v=spf1 ip4:198.2.180.60/32 ip4:13.111.2.227/32 include:spf1.stripe.com include:greenhouse-outbound-mail.stripe.com include:_spf.qualtrics.com ~all"
+                      ]
+                    },
+                    "dmarc": {
+                      "present": true,
+                      "records": [
+                        "v=DMARC1; p=reject; pct=100; fo=1; rua=mailto:dmarc-reports@stripe.com; ruf=mailto:dmarc-forensics@stripe.com;"
+                      ]
+                    },
+                    "dkim": {
+                      "found": [
+                        "google",
+                        "s1",
+                        "s2",
+                        "mandrill",
+                        "intercom",
+                        "m1"
+                      ],
+                      "records": [
+                        {
+                          "selector": "google",
+                          "records": [
+                            "v=DKIM1; k=rsa; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC4T1…"
+                          ]
+                        }
+                      ],
+                      "note": "Probed common selectors (Google, Microsoft 365, Mailchimp, SendGrid, etc.). Custom or hash-based selectors aren't auto-discoverable."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid domain",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPError"
+                },
+                "example": {
+                  "detail": "invalid domain"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Daily demo limit reached",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until the limit resets"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DemoRateLimited"
+                },
+                "example": {
+                  "error": "demo_rate_limit_exceeded",
+                  "message": "Demo limit is 5 req/IP/day. Subscribe on RapidAPI for full access.",
+                  "retry_after_seconds": 51840,
+                  "subscribe_url": "https://rapidapi.com/osiris-technical-institute-osiris-technical-institute-default/api/domain-intelligence-api/pricing"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Health check",
+        "operationId": "health",
+        "tags": [
+          "Utility"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response (long arrays in the example are shortened)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "service": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "string"
+                    },
+                    "redis": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "example": {
+                  "status": "ok",
+                  "service": "domain-intel",
+                  "version": "0.2.0",
+                  "redis": true
+                }
+              }
+            }
+          }
         }
       }
     }
   },
   "components": {
     "schemas": {
-      "HTTPValidationError": {
-        "properties": {
-          "detail": { "items": { "$ref": "#/components/schemas/ValidationError" }, "type": "array", "title": "Detail" }
-        },
+      "LookupResponse": {
         "type": "object",
-        "title": "HTTPValidationError"
+        "required": [
+          "domain",
+          "elapsed_ms",
+          "cached",
+          "dns",
+          "ssl",
+          "whois",
+          "subdomains",
+          "email_security"
+        ],
+        "properties": {
+          "domain": {
+            "type": "string"
+          },
+          "elapsed_ms": {
+            "type": "integer",
+            "description": "Server time for this request"
+          },
+          "cached": {
+            "type": "object",
+            "description": "True for each section served from cache",
+            "properties": {
+              "dns": {
+                "type": "boolean"
+              },
+              "ssl": {
+                "type": "boolean"
+              },
+              "whois": {
+                "type": "boolean"
+              },
+              "subdomains": {
+                "type": "boolean"
+              },
+              "email_security": {
+                "type": "boolean"
+              }
+            }
+          },
+          "dns": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DNSRecords"
+              },
+              {
+                "$ref": "#/components/schemas/SectionError"
+              }
+            ]
+          },
+          "ssl": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SSLCertificate"
+              },
+              {
+                "$ref": "#/components/schemas/SectionError"
+              }
+            ]
+          },
+          "whois": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Whois"
+              },
+              {
+                "$ref": "#/components/schemas/SectionError"
+              }
+            ]
+          },
+          "subdomains": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Subdomains"
+              },
+              {
+                "$ref": "#/components/schemas/SectionError"
+              }
+            ]
+          },
+          "email_security": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/EmailSecurity"
+              },
+              {
+                "$ref": "#/components/schemas/SectionError"
+              }
+            ]
+          }
+        }
+      },
+      "Whois": {
+        "type": "object",
+        "properties": {
+          "registrar": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "As given by the registry, usually ISO 8601"
+          },
+          "updated": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expires": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "nameservers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "status": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "EPP status codes"
+          },
+          "handle": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Registry handle (ROID)"
+          },
+          "ldhName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "_source": {
+            "type": "string",
+            "description": "Tier that answered, e.g. rdap.org, iana-bootstrap:..., fallback:..., port43:whois.nic.fr"
+          }
+        }
+      },
+      "DNSRecords": {
+        "type": "object",
+        "properties": {
+          "A": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "AAAA": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "MX": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "TXT": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "NS": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "CAA": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "SOA": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "SSLCertificate": {
+        "type": "object",
+        "properties": {
+          "issuer": {
+            "type": "string",
+            "description": "Issuer DN (RFC 4514)"
+          },
+          "subject": {
+            "type": "string",
+            "description": "Subject DN (RFC 4514)"
+          },
+          "valid_from": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "valid_to": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "days_until_expiry": {
+            "type": "integer",
+            "description": "Negative once expired"
+          },
+          "serial_number": {
+            "type": "string"
+          },
+          "sans": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Every DNS Subject Alternative Name on the certificate"
+          },
+          "signature_algorithm": {
+            "type": "string",
+            "description": "e.g. sha256WithRSAEncryption or ecdsa-with-SHA384 (dotted OID if unnamed)"
+          }
+        }
+      },
+      "Subdomains": {
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "integer",
+            "description": "Total names discovered"
+          },
+          "returned": {
+            "type": "integer",
+            "description": "Names in this response (max 2,000)"
+          },
+          "subdomains": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "All names, live first"
+          },
+          "live_count": {
+            "type": "integer",
+            "description": "Names that resolve now. Absent until the liveness check has run."
+          },
+          "live": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LiveHost"
+            },
+            "description": "Names that resolve now. Absent until the liveness check has run."
+          },
+          "pools": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Pool"
+            },
+            "description": "Collapsed shared-infrastructure subtrees"
+          },
+          "sources_used": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Per-source status: 'name: N found', 'name: enriching', 'name: rate-limited', 'name: unavailable', 'name: skipped'; 'liveness: enriching' while the live check runs"
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Only present when fewer than 20 names were found and some sources failed"
+          }
+        }
+      },
+      "LiveHost": {
+        "type": "object",
+        "properties": {
+          "host": {
+            "type": "string"
+          },
+          "ip": {
+            "type": "string",
+            "description": "IP address or CNAME target"
+          }
+        }
+      },
+      "Pool": {
+        "type": "object",
+        "properties": {
+          "zone": {
+            "type": "string",
+            "example": "*.ns.cloudflare.com"
+          },
+          "count": {
+            "type": "integer"
+          }
+        }
+      },
+      "EmailSecurity": {
+        "type": "object",
+        "properties": {
+          "spf": {
+            "type": "object",
+            "properties": {
+              "present": {
+                "type": "boolean"
+              },
+              "records": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "dmarc": {
+            "type": "object",
+            "properties": {
+              "present": {
+                "type": "boolean"
+              },
+              "records": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "dkim": {
+            "type": "object",
+            "properties": {
+              "found": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Selectors that returned a DKIM key"
+              },
+              "records": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "selector": {
+                      "type": "string"
+                    },
+                    "records": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              },
+              "note": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "SectionError": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "description": "Returned in place of a section that failed or timed out",
+        "properties": {
+          "error": {
+            "type": "string",
+            "example": "timeout"
+          },
+          "source": {
+            "type": "string"
+          },
+          "timeout_seconds": {
+            "type": "number"
+          },
+          "attempts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "WHOIS only: what each tier returned"
+          }
+        }
+      },
+      "DemoResponse": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string"
+          },
+          "demo_meta": {
+            "type": "object",
+            "properties": {
+              "requests_used_today": {
+                "type": "integer"
+              },
+              "daily_limit": {
+                "type": "integer"
+              },
+              "requests_remaining": {
+                "type": "integer"
+              },
+              "note": {
+                "type": "string"
+              }
+            }
+          },
+          "dns": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DNSRecords"
+              },
+              {
+                "$ref": "#/components/schemas/SectionError"
+              }
+            ]
+          },
+          "ssl": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SSLCertificate"
+              },
+              {
+                "$ref": "#/components/schemas/SectionError"
+              }
+            ]
+          },
+          "whois": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Whois"
+              },
+              {
+                "$ref": "#/components/schemas/SectionError"
+              }
+            ]
+          },
+          "subdomains": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Subdomains"
+              },
+              {
+                "$ref": "#/components/schemas/SectionError"
+              }
+            ]
+          },
+          "email_security": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/EmailSecurity"
+              },
+              {
+                "$ref": "#/components/schemas/SectionError"
+              }
+            ]
+          }
+        }
+      },
+      "DemoRateLimited": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "retry_after_seconds": {
+            "type": "integer"
+          },
+          "subscribe_url": {
+            "type": "string"
+          }
+        }
+      },
+      "HTTPError": {
+        "type": "object",
+        "properties": {
+          "detail": {
+            "type": "string"
+          }
+        }
+      },
+      "HTTPValidationError": {
+        "type": "object",
+        "properties": {
+          "detail": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            }
+          }
+        }
       },
       "ValidationError": {
-        "properties": {
-          "loc": { "items": { "anyOf": [ { "type": "string" }, { "type": "integer" } ] }, "type": "array", "title": "Location" },
-          "msg": { "type": "string", "title": "Message" },
-          "type": { "type": "string", "title": "Error Type" }
-        },
         "type": "object",
-        "required": ["loc", "msg", "type"],
-        "title": "ValidationError"
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "properties": {
+          "loc": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            }
+          },
+          "msg": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        }
       }
     }
   }
 }
-
-
