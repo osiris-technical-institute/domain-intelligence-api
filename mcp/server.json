@@ -1,0 +1,34 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "com.oti-labs/domain-intelligence",
+  "title": "Domain Intelligence",
+  "description": "WHOIS/RDAP, DNS, SSL, live subdomains with IPs, and SPF/DMARC/DKIM for any domain.",
+  "version": "1.0.0",
+  "websiteUrl": "https://oti-labs.com/domain-intelligence-api",
+  "repository": {
+    "url": "https://github.com/osiris-technical-institute/domain-intelligence-api",
+    "source": "github",
+    "subfolder": "mcp"
+  },
+  "icons": [
+    {
+      "src": "https://oti-labs.com/favicon-192.png",
+      "mimeType": "image/png",
+      "sizes": ["192x192"]
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://oti-labs.com/mcp",
+      "headers": [
+        {
+          "name": "X-RapidAPI-Key",
+          "description": "Your RapidAPI key, subscribed to the Domain Intelligence API (free plan: 1,000 requests/month)",
+          "isRequired": true,
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}
