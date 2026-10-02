@@ -27,6 +27,10 @@ def _fetch_cert_sync(domain: str, port: int = 443, timeout: float = 5.0) -> dict
             sans = x.extensions.get_extension_for_class(x509.SubjectAlternativeName).value.get_values_for_type(x509.DNSName)
         except Exception:
             sans = []
+        sig = x.signature_algorithm_oid
+        sig_name = getattr(sig, "_name", None)
+        if not sig_name or sig_name == "Unknown OID":
+            sig_name = sig.dotted_string
         return {
             "issuer": x.issuer.rfc4514_string(),
             "subject": x.subject.rfc4514_string(),
@@ -34,8 +38,8 @@ def _fetch_cert_sync(domain: str, port: int = 443, timeout: float = 5.0) -> dict
             "valid_to": not_after.isoformat(),
             "days_until_expiry": days_left,
             "serial_number": str(x.serial_number),
-            "sans": sans[:20],
-            "signature_algorithm": str(x.signature_algorithm_oid),
+            "sans": list(sans),
+            "signature_algorithm": sig_name,
         }
     except Exception as e:
         return {"error": f"{type(e).__name__}: {e}"}
