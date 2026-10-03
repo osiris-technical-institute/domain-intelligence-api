@@ -4,7 +4,7 @@ An [MCP](https://modelcontextprotocol.io) server that gives AI agents and assist
 
 - **Hosted endpoint:** `https://oti-labs.com/mcp` (Streamable HTTP)
 - **Registry name:** `com.oti-labs/domain-intelligence`
-- **No key to start:** 1,000 lookups a month per IP, up to 10 a minute.
+- **No key to start:** 1,000 lookups a month per IP (per /64 for IPv6), up to 10 a minute. Hosted connectors that call from their provider's shared addresses (Claude, ChatGPT) share one pool per provider: 10,000 a month, up to 120 a minute. Keyless use on the hosted server stops at 2,000 calls a day in total and resets at 00:00 UTC.
 - **After that:** add a RapidAPI key in the `X-RapidAPI-Key` header (or `Authorization: Bearer <key>`). Calls then count on your RapidAPI plan; the free plan adds another 1,000 a month: [get a key](https://rapidapi.com/osiris-technical-institute-osiris-technical-institute-default/api/domain-intelligence-api/pricing).
 
 ## Tools
@@ -99,3 +99,5 @@ uvicorn server:app --host 127.0.0.1 --port 8002
 ```
 
 To send keyed calls to your own copy of the API instead of RapidAPI, set `DI_API_BASE` (and `DI_PROXY_SECRET` if your API checks one).
+
+Keyless limits can be changed with `MCP_KEYLESS_MONTHLY`, `MCP_KEYLESS_PER_MINUTE`, `MCP_PROVIDER_MONTHLY`, `MCP_PROVIDER_PER_MINUTE` and `MCP_KEYLESS_DAILY_CEILING`. ChatGPT's connector addresses come from `chatgpt-connectors.json`, which `refresh_openai_ranges.py` downloads from OpenAI; run it once a day from cron. Without that file, ChatGPT calls are counted per IP. Claude's outbound range is built in.
