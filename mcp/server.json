@@ -3,8 +3,8 @@
   "name": "com.oti-labs/domain-intelligence",
   "title": "Domain Intelligence",
   "description": "WHOIS/RDAP, DNS, SSL, live subdomains with IPs, and SPF/DMARC/DKIM for any domain.",
-  "version": "1.0.0",
-  "websiteUrl": "https://oti-labs.com/domain-intelligence-api",
+  "version": "1.1.0",
+  "websiteUrl": "https://oti-labs.com/mcp-server",
   "repository": {
     "url": "https://github.com/osiris-technical-institute/domain-intelligence-api",
     "source": "github",
@@ -14,7 +14,9 @@
     {
       "src": "https://oti-labs.com/favicon-192.png",
       "mimeType": "image/png",
-      "sizes": ["192x192"]
+      "sizes": [
+        "192x192"
+      ]
     }
   ],
   "remotes": [
@@ -24,8 +26,8 @@
       "headers": [
         {
           "name": "X-RapidAPI-Key",
-          "description": "Your RapidAPI key, subscribed to the Domain Intelligence API (free plan: 1,000 requests/month)",
-          "isRequired": true,
+          "description": "Optional. Without a key: 1,000 free lookups a month per IP. With a RapidAPI key subscribed to the Domain Intelligence API: your plan's quota (free plan: another 1,000 a month).",
+          "isRequired": false,
           "isSecret": true
         }
       ]

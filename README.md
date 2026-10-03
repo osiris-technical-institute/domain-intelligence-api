@@ -62,10 +62,10 @@ const data = await res.json();
 
 ## MCP server
 
-AI agents and assistants can use the API as tools through the hosted MCP server at `https://oti-labs.com/mcp` (Streamable HTTP, registry name `com.oti-labs/domain-intelligence`). Send your RapidAPI key in the `X-RapidAPI-Key` header; each tool call counts as one API call on your plan.
+AI agents and assistants can use the API as tools through the hosted MCP server at `https://oti-labs.com/mcp` (Streamable HTTP, registry name `com.oti-labs/domain-intelligence`). No key is needed for the first 1,000 lookups a month per IP. After that, send a RapidAPI key in the `X-RapidAPI-Key` header; its free plan adds 1,000 a month.
 
 ```bash
-claude mcp add --transport http domain-intelligence https://oti-labs.com/mcp --header "X-RapidAPI-Key: YOUR_KEY"
+claude mcp add --transport http domain-intelligence https://oti-labs.com/mcp
 ```
 
 Tools: `domain_lookup`, `whois_lookup`, `dns_records`, `ssl_certificate`, `subdomains`, `email_security`. Setup for Cursor, VS Code, Windsurf and Claude Desktop is in [`mcp/README.md`](mcp/README.md).
@@ -183,6 +183,7 @@ app/
 mcp/
   server.py           MCP server (tools that call the API through RapidAPI)
   server.json         MCP Registry entry
+glama.json            Glama listing maintainers
 rapidapi/
   openapi.json        OpenAPI 3.1 spec
   terms.md            Terms of use

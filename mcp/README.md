@@ -4,7 +4,8 @@ An [MCP](https://modelcontextprotocol.io) server that gives AI agents and assist
 
 - **Hosted endpoint:** `https://oti-labs.com/mcp` (Streamable HTTP)
 - **Registry name:** `com.oti-labs/domain-intelligence`
-- **Auth:** your RapidAPI key in the `X-RapidAPI-Key` header (or `Authorization: Bearer <key>`). Each tool call is a normal API call on your plan. The free plan gives 1,000 requests a month: [get a key](https://rapidapi.com/osiris-technical-institute-osiris-technical-institute-default/api/domain-intelligence-api/pricing).
+- **No key to start:** 1,000 lookups a month per IP, up to 10 a minute.
+- **After that:** add a RapidAPI key in the `X-RapidAPI-Key` header (or `Authorization: Bearer <key>`). Calls then count on your RapidAPI plan; the free plan adds another 1,000 a month: [get a key](https://rapidapi.com/osiris-technical-institute-osiris-technical-institute-default/api/domain-intelligence-api/pricing).
 
 ## Tools
 
@@ -21,12 +22,12 @@ All tools are read-only.
 
 ## Setup
 
-Replace `YOUR_KEY` with your RapidAPI key.
+These work without a key. To use a RapidAPI key, add the header shown at the end of this section.
 
 **Claude Code**
 
 ```bash
-claude mcp add --transport http domain-intelligence https://oti-labs.com/mcp --header "X-RapidAPI-Key: YOUR_KEY"
+claude mcp add --transport http domain-intelligence https://oti-labs.com/mcp
 ```
 
 **Cursor** (`~/.cursor/mcp.json`)
@@ -35,8 +36,7 @@ claude mcp add --transport http domain-intelligence https://oti-labs.com/mcp --h
 {
   "mcpServers": {
     "domain-intelligence": {
-      "url": "https://oti-labs.com/mcp",
-      "headers": { "X-RapidAPI-Key": "YOUR_KEY" }
+      "url": "https://oti-labs.com/mcp"
     }
   }
 }
@@ -49,13 +49,9 @@ claude mcp add --transport http domain-intelligence https://oti-labs.com/mcp --h
   "servers": {
     "domain-intelligence": {
       "type": "http",
-      "url": "https://oti-labs.com/mcp",
-      "headers": { "X-RapidAPI-Key": "${input:rapidapi-key}" }
+      "url": "https://oti-labs.com/mcp"
     }
-  },
-  "inputs": [
-    { "type": "promptString", "id": "rapidapi-key", "description": "RapidAPI key", "password": true }
-  ]
+  }
 }
 ```
 
@@ -65,8 +61,7 @@ claude mcp add --transport http domain-intelligence https://oti-labs.com/mcp --h
 {
   "mcpServers": {
     "domain-intelligence": {
-      "serverUrl": "https://oti-labs.com/mcp",
-      "headers": { "X-RapidAPI-Key": "YOUR_KEY" }
+      "serverUrl": "https://oti-labs.com/mcp"
     }
   }
 }
@@ -79,12 +74,13 @@ claude mcp add --transport http domain-intelligence https://oti-labs.com/mcp --h
   "mcpServers": {
     "domain-intelligence": {
       "command": "npx",
-      "args": ["-y", "mcp-remote", "https://oti-labs.com/mcp", "--header", "X-RapidAPI-Key:${RAPIDAPI_KEY}"],
-      "env": { "RAPIDAPI_KEY": "YOUR_KEY" }
+      "args": ["-y", "mcp-remote", "https://oti-labs.com/mcp"]
     }
   }
 }
 ```
+
+**Adding a RapidAPI key.** Claude Code: append `--header "X-RapidAPI-Key: YOUR_KEY"`. Cursor, VS Code and Windsurf: add `"headers": { "X-RapidAPI-Key": "YOUR_KEY" }` next to the URL. `mcp-remote`: add `"--header", "X-RapidAPI-Key:YOUR_KEY"` to `args`.
 
 ## Example prompts
 
@@ -95,11 +91,11 @@ claude mcp add --transport http domain-intelligence https://oti-labs.com/mcp --h
 
 ## Self-hosting
 
-The server is one file. It calls the API through RapidAPI with the caller's key:
+The server is one file. Keyed calls go through RapidAPI with the caller's key; keyless calls go to `DI_INTERNAL_BASE` with `RAPIDAPI_PROXY_SECRET` and are counted in Redis (`REDIS_URL`):
 
 ```bash
 pip install -r requirements.txt
 uvicorn server:app --host 127.0.0.1 --port 8002
 ```
 
-To point it at your own copy of the API instead, set `DI_API_BASE` (and `DI_PROXY_SECRET` if your API checks one).
+To send keyed calls to your own copy of the API instead of RapidAPI, set `DI_API_BASE` (and `DI_PROXY_SECRET` if your API checks one).

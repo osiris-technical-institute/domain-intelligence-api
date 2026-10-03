@@ -2,3 +2,4 @@ httpx>=0.28.1
 mcp>=2.3.0
 starlette>=1.7.0
 uvicorn>=0.54.0
+redis>=8.1.0
