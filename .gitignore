@@ -35,3 +35,6 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+
+# MCP server: downloaded by mcp/refresh_openai_ranges.py
+mcp/chatgpt-connectors.json

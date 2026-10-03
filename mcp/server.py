@@ -6,16 +6,22 @@ counted, quota-limited and billed on the caller's plan. Send the key as the
 `X-RapidAPI-Key` header (or `Authorization: Bearer <key>`).
 
 Without a key, calls run keyless: 1,000 lookups per IP per calendar month (UTC) at up to 10 a
-minute, the same as RapidAPI's free plan. They go straight to the local API (not through
-RapidAPI) and are counted in Redis. When they run out, a free RapidAPI key gives 1,000 more.
+minute, the same as RapidAPI's free plan. IPv6 clients are counted per /64. Hosted clients that
+call from their provider's shared addresses (Claude connectors, ChatGPT connectors) share one
+pool per provider: 10,000 a month at up to 120 a minute. All keyless use together stops at 2,000
+calls a day. Keyless calls go straight to the local API (not through RapidAPI) and are counted in
+Redis. When they run out, a free RapidAPI key gives 1,000 more.
 
 Run:  uvicorn server:app --host 127.0.0.1 --port 8002 --proxy-headers
 Test against a local API instead of RapidAPI: set DI_API_BASE and DI_PROXY_SECRET.
 """
 import datetime
 import hashlib
+import ipaddress
+import json
 import os
 import re
+import time
 from typing import Any
 
 import httpx
@@ -35,8 +41,22 @@ TEST_PROXY_SECRET = os.environ.get("DI_PROXY_SECRET", "")  # test mode only, uns
 INTERNAL_BASE = os.environ.get("DI_INTERNAL_BASE", "http://127.0.0.1:8001")
 INTERNAL_SECRET = os.environ.get("RAPIDAPI_PROXY_SECRET", "")
 REDIS_URL = os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/0")
-KEYLESS_MONTHLY = 1000
-KEYLESS_PER_MINUTE = 10
+KEY_PREFIX = os.environ.get("MCP_KEYLESS_PREFIX", "mcp:keyless")   # tests use their own prefix
+KEYLESS_MONTHLY = int(os.environ.get("MCP_KEYLESS_MONTHLY", "1000"))
+KEYLESS_PER_MINUTE = int(os.environ.get("MCP_KEYLESS_PER_MINUTE", "10"))
+# Hosted clients call from their provider's shared egress addresses, so each provider gets one
+# shared bucket instead of per-IP ones.
+PROVIDER_MONTHLY = int(os.environ.get("MCP_PROVIDER_MONTHLY", "10000"))
+PROVIDER_PER_MINUTE = int(os.environ.get("MCP_PROVIDER_PER_MINUTE", "120"))
+KEYLESS_DAILY_CEILING = int(os.environ.get("MCP_KEYLESS_DAILY_CEILING", "2000"))   # all keyless callers
+# Claude connectors: https://platform.claude.com/docs/en/api/ip-addresses (outbound).
+ANTHROPIC_RANGES = [ipaddress.ip_network("160.79.104.0/21")]
+# ChatGPT connectors: https://openai.com/chatgpt-connectors.json, copied here daily by
+# refresh_openai_ranges.py. Without the file, ChatGPT calls are counted per IP.
+OPENAI_RANGES_FILE = os.environ.get(
+    "MCP_OPENAI_RANGES_FILE", os.path.join(os.path.dirname(os.path.abspath(__file__)), "chatgpt-connectors.json"))
+PROVIDER_LABEL = {"anthropic": "Claude", "openai": "ChatGPT"}
+VERSION = "1.2.0"
 LISTING = ("https://rapidapi.com/osiris-technical-institute-osiris-technical-institute-default"
            "/api/domain-intelligence-api")
 PRICING = LISTING + "/pricing"
@@ -46,7 +66,7 @@ READ_ONLY = ToolAnnotations(read_only_hint=True, idempotent_hint=True, open_worl
 mcp = MCPServer(
     name="domain-intelligence",
     title="Domain Intelligence",
-    version="1.1.0",
+    version=VERSION,
     website_url="https://oti-labs.com/mcp-server",
     icons=[Icon(src="https://oti-labs.com/favicon-192.png", mimeType="image/png", sizes=["192x192"])],
     instructions=(
@@ -54,7 +74,8 @@ mcp = MCPServer(
         "records, the live SSL certificate, subdomains (live hosts with IPs vs historical names) and "
         "email authentication (SPF, DMARC, DKIM). Use domain_lookup for the full picture in one call, "
         "or a single tool when only one part is needed. Pass bare domains such as example.com. "
-        f"Works without a key for {KEYLESS_MONTHLY:,} lookups a month per IP. After that, send a "
+        f"Works without a key for {KEYLESS_MONTHLY:,} lookups a month per IP (hosted Claude and ChatGPT "
+        "connectors share a larger pool per provider). After that, send a "
         "RapidAPI key subscribed to the Domain Intelligence API as the X-RapidAPI-Key header; its "
         f"free plan adds 1,000 requests a month: {PRICING}"
     ),
@@ -109,32 +130,98 @@ async def _fetch(ctx: Context, path: str, params: dict | None = None) -> dict[st
     return await _keyless(ctx, path, params)
 
 
+_openai = {"nets": [], "mtime": None, "checked": None}
+
+
+def _openai_ranges() -> list:
+    """ChatGPT connector ranges from the local file, re-read when it changes (checked once a minute).
+    A missing or broken file keeps the last good list."""
+    now = time.monotonic()
+    if _openai["checked"] is not None and now - _openai["checked"] < 60:
+        return _openai["nets"]
+    _openai["checked"] = now
+    try:
+        mtime = os.stat(OPENAI_RANGES_FILE).st_mtime
+        if mtime != _openai["mtime"]:
+            with open(OPENAI_RANGES_FILE, encoding="utf-8") as f:
+                prefixes = json.load(f)["prefixes"]
+            _openai["nets"] = [ipaddress.ip_network(p.get("ipv4Prefix") or p["ipv6Prefix"], strict=False)
+                               for p in prefixes]
+            _openai["mtime"] = mtime
+    except Exception:
+        pass
+    return _openai["nets"]
+
+
+def _bucket(ip: str) -> tuple[str, str | None]:
+    """Quota bucket for a client address and the provider it belongs to, if any: a provider's shared
+    bucket, the /64 for IPv6, otherwise the IPv4 address."""
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return "unknown", None
+    if addr.version == 6 and addr.ipv4_mapped:
+        addr = addr.ipv4_mapped
+    if any(addr in n for n in ANTHROPIC_RANGES):
+        return "provider:anthropic", "anthropic"
+    if any(addr in n for n in _openai_ranges()):
+        return "provider:openai", "openai"
+    if addr.version == 6:
+        return str(ipaddress.ip_network(f"{addr}/64", strict=False)), None
+    return str(addr), None
+
+
 async def _keyless(ctx: Context, path: str, params: dict | None) -> dict[str, Any]:
-    ip = ((ctx.headers or {}).get("x-forwarded-for") or "").split(",")[0].strip() or "unknown"
+    ip = ((ctx.headers or {}).get("x-forwarded-for") or "").split(",")[0].strip()
+    bucket, provider = _bucket(ip)
+    label = PROVIDER_LABEL.get(provider or "", "")
+    monthly, per_minute = (PROVIDER_MONTHLY, PROVIDER_PER_MINUTE) if provider else (KEYLESS_MONTHLY, KEYLESS_PER_MINUTE)
     now = datetime.datetime.now(datetime.timezone.utc)
-    month_key = f"mcp:keyless:{ip}:{now:%Y-%m}"
+    month_key = f"{KEY_PREFIX}:{bucket}:{now:%Y-%m}"
+    day_key = f"{KEY_PREFIX}:calls:{now:%Y-%m-%d}"   # keyless calls served today, also the daily ceiling
     used = None
+    counted = False
     try:
         r = _rds()
-        minute_key = f"mcp:keyless:min:{ip}:{now:%Y%m%d%H%M}"
+        minute_key = f"{KEY_PREFIX}:min:{bucket}:{now:%Y%m%d%H%M}"
         pipe = r.pipeline()
         pipe.incr(minute_key); pipe.expire(minute_key, 120)
-        per_min = (await pipe.execute())[0]
-        if per_min > KEYLESS_PER_MINUTE:
-            raise ToolError(f"Keyless use is limited to {KEYLESS_PER_MINUTE} lookups a minute. Wait a "
+        if (await pipe.execute())[0] > per_minute:
+            if provider:
+                raise ToolError(f"Keyless lookups from {label} connectors share a limit of {per_minute} a "
+                                "minute. Wait a moment and try again.")
+            raise ToolError(f"Keyless use is limited to {per_minute} lookups a minute. Wait a "
                             f"moment, or add a RapidAPI key as X-RapidAPI-Key: {PRICING}")
         pipe = r.pipeline()
         pipe.incr(month_key); pipe.expire(month_key, 40 * 86400)
         used = (await pipe.execute())[0]
-        if used > KEYLESS_MONTHLY:
+        if used > monthly:
+            if provider:
+                raise ToolError(
+                    f"The keyless pool shared by everyone using this server from {label} ({monthly:,} lookups "
+                    "a month) is used up. To keep going, connect from a client that can send a request header "
+                    "(Claude Code, Cursor, VS Code, Windsurf) with a free RapidAPI key as X-RapidAPI-Key "
+                    f"(1,000 requests a month, no card): {PRICING}")
             raise ToolError(
-                f"The {KEYLESS_MONTHLY:,} free keyless lookups for this month are used up. Get a free "
+                f"The {monthly:,} free keyless lookups for this month are used up. Get a free "
                 "RapidAPI key (another 1,000 requests a month, no card) and send it as X-RapidAPI-Key: "
                 f"{PRICING}")
-        stats = r.pipeline()   # anonymous adoption stats: calls per day, distinct (hashed) IPs per month
-        stats.incr(f"mcp:keyless:calls:{now:%Y-%m-%d}"); stats.expire(f"mcp:keyless:calls:{now:%Y-%m-%d}", 120 * 86400)
-        stats.sadd(f"mcp:keyless:ips:{now:%Y-%m}", hashlib.sha256(ip.encode()).hexdigest()[:16])
-        stats.expire(f"mcp:keyless:ips:{now:%Y-%m}", 120 * 86400)
+        pipe = r.pipeline()
+        pipe.incr(day_key); pipe.expire(day_key, 120 * 86400)
+        if (await pipe.execute())[0] > KEYLESS_DAILY_CEILING:
+            pipe = r.pipeline()
+            pipe.decr(day_key); pipe.decr(month_key)   # a refused call doesn't count
+            await pipe.execute()
+            raise ToolError(
+                "Keyless capacity on this server is used up for today; it resets at 00:00 UTC. To keep "
+                "going now, add a free RapidAPI key as X-RapidAPI-Key (1,000 requests a month, no card): "
+                f"{PRICING}")
+        counted = True
+        stats = r.pipeline()   # anonymous adoption stats: distinct (hashed) callers and calls by source, per month
+        stats.sadd(f"{KEY_PREFIX}:ips:{now:%Y-%m}", hashlib.sha256(bucket.encode()).hexdigest()[:16])
+        stats.expire(f"{KEY_PREFIX}:ips:{now:%Y-%m}", 120 * 86400)
+        stats.hincrby(f"{KEY_PREFIX}:src:{now:%Y-%m}", provider or "ip", 1)
+        stats.expire(f"{KEY_PREFIX}:src:{now:%Y-%m}", 120 * 86400)
         await stats.execute()
     except ToolError:
         raise
@@ -144,21 +231,32 @@ async def _keyless(ctx: Context, path: str, params: dict | None) -> dict[str, An
     try:
         resp = await _http().get(f"{INTERNAL_BASE}{path}", params=params or None, headers=headers)
     except httpx.HTTPError as e:
-        await _refund(month_key)
+        if counted:
+            await _refund(month_key, day_key)
         raise ToolError(f"Could not reach the API: {type(e).__name__}. Try again in a moment.")
     if resp.status_code >= 500 or resp.status_code in (401, 403):
-        await _refund(month_key)
+        if counted:
+            await _refund(month_key, day_key)
         raise ToolError(f"The API returned HTTP {resp.status_code}. Try again in a moment.")
     data = _parse(resp)
     if used is not None:
-        data["_keyless"] = (f"{max(0, KEYLESS_MONTHLY - used):,} of {KEYLESS_MONTHLY:,} free keyless lookups left "
-                            f"this month. A free RapidAPI key adds 1,000 more: {PRICING}")
+        left = max(0, monthly - used)
+        if provider:
+            data["_keyless"] = (f"{left:,} of {monthly:,} lookups left this month in the keyless pool shared by "
+                                f"all {label} users. Your own free RapidAPI key, sent as X-RapidAPI-Key from a "
+                                f"client such as Claude Code or Cursor, gives you 1,000 a month: {PRICING}")
+        else:
+            data["_keyless"] = (f"{left:,} of {monthly:,} free keyless lookups left this month. "
+                                f"A free RapidAPI key adds 1,000 more: {PRICING}")
     return data
 
 
-async def _refund(month_key: str) -> None:
+async def _refund(*keys: str) -> None:
     try:
-        await _rds().decr(month_key)
+        pipe = _rds().pipeline()
+        for k in keys:
+            pipe.decr(k)
+        await pipe.execute()
     except Exception:
         pass
 
@@ -283,7 +381,7 @@ async def email_security(domain: str, ctx: Context) -> dict[str, Any]:
 
 @mcp.custom_route("/healthz", methods=["GET"])
 async def healthz(request):
-    return JSONResponse({"status": "ok", "server": "domain-intelligence-mcp", "version": "1.1.0"})
+    return JSONResponse({"status": "ok", "server": "domain-intelligence-mcp", "version": VERSION})
 
 
 # Public server with per-call key auth, so DNS-rebinding protection (meant for local servers)
