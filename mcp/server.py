@@ -7,9 +7,9 @@ counted, quota-limited and billed on the caller's plan. Send the key as the
 
 Without a key, calls run keyless: 1,000 lookups per IP per calendar month (UTC) at up to 10 a
 minute, the same as RapidAPI's free plan. IPv6 clients are counted per /64. Hosted clients that
-call from their provider's shared addresses (Claude connectors, ChatGPT connectors) share one
-pool per provider: 10,000 a month at up to 120 a minute. All keyless use together stops at 2,000
-calls a day. Keyless calls go straight to the local API (not through RapidAPI) and are counted in
+call from their provider's shared addresses (Claude and ChatGPT connectors, the Smithery gateway)
+share one pool per provider: 10,000 a month at up to 120 a minute. All keyless use together stops
+at 2,000 calls a day. Keyless calls go straight to the local API (not through RapidAPI) and are counted in
 Redis. When they run out, a free RapidAPI key gives 1,000 more.
 
 Run:  uvicorn server:app --host 127.0.0.1 --port 8002 --proxy-headers
@@ -55,8 +55,24 @@ ANTHROPIC_RANGES = [ipaddress.ip_network("160.79.104.0/21")]
 # refresh_openai_ranges.py. Without the file, ChatGPT calls are counted per IP.
 OPENAI_RANGES_FILE = os.environ.get(
     "MCP_OPENAI_RANGES_FILE", os.path.join(os.path.dirname(os.path.abspath(__file__)), "chatgpt-connectors.json"))
-PROVIDER_LABEL = {"anthropic": "Claude", "openai": "ChatGPT"}
-VERSION = "1.2.0"
+# Smithery's gateway calls from Cloudflare Workers, whose shared edge addresses are also used by
+# other Workers. Cloudflare sets Cf-Worker to the calling zone and a Worker can't override it, so
+# Cf-Worker: smithery.ai from a Cloudflare address identifies Smithery. https://www.cloudflare.com/ips/
+CLOUDFLARE_RANGES = [ipaddress.ip_network(n) for n in (
+    "173.245.48.0/20", "103.21.244.0/22", "103.22.200.0/22", "103.31.4.0/22", "141.101.64.0/18",
+    "108.162.192.0/18", "190.93.240.0/20", "188.114.96.0/20", "197.234.240.0/22", "198.41.128.0/17",
+    "162.158.0.0/15", "104.16.0.0/13", "104.24.0.0/14", "172.64.0.0/13", "131.0.72.0/22",
+    "2400:cb00::/32", "2606:4700::/32", "2803:f800::/32", "2405:b500::/32", "2405:8100::/32",
+    "2a06:98c0::/29", "2c0f:f248::/32")]
+SMITHERY_WORKER = "smithery.ai"
+PROVIDER_LABEL = {"anthropic": "Claude", "openai": "ChatGPT", "smithery": "Smithery"}
+# How a user of each platform gets their own allowance (a RapidAPI key sent as a header).
+OWN_KEY_HINT = {
+    "anthropic": "send a free RapidAPI key as X-RapidAPI-Key from a client that can set headers (Claude Code, Cursor, VS Code, Windsurf)",
+    "openai": "send a free RapidAPI key as X-RapidAPI-Key from a client that can set headers (Claude Code, Cursor, VS Code, Windsurf)",
+    "smithery": "add a free RapidAPI key as X-RapidAPI-Key in this server's connection settings on Smithery",
+}
+VERSION = "1.2.1"
 LISTING = ("https://rapidapi.com/osiris-technical-institute-osiris-technical-institute-default"
            "/api/domain-intelligence-api")
 PRICING = LISTING + "/pricing"
@@ -74,7 +90,7 @@ mcp = MCPServer(
         "records, the live SSL certificate, subdomains (live hosts with IPs vs historical names) and "
         "email authentication (SPF, DMARC, DKIM). Use domain_lookup for the full picture in one call, "
         "or a single tool when only one part is needed. Pass bare domains such as example.com. "
-        f"Works without a key for {KEYLESS_MONTHLY:,} lookups a month per IP (hosted Claude and ChatGPT "
+        f"Works without a key for {KEYLESS_MONTHLY:,} lookups a month per IP (hosted Claude, ChatGPT and Smithery "
         "connectors share a larger pool per provider). After that, send a "
         "RapidAPI key subscribed to the Domain Intelligence API as the X-RapidAPI-Key header; its "
         f"free plan adds 1,000 requests a month: {PRICING}"
@@ -153,7 +169,7 @@ def _openai_ranges() -> list:
     return _openai["nets"]
 
 
-def _bucket(ip: str) -> tuple[str, str | None]:
+def _bucket(ip: str, headers=None) -> tuple[str, str | None]:
     """Quota bucket for a client address and the provider it belongs to, if any: a provider's shared
     bucket, the /64 for IPv6, otherwise the IPv4 address."""
     try:
@@ -162,6 +178,9 @@ def _bucket(ip: str) -> tuple[str, str | None]:
         return "unknown", None
     if addr.version == 6 and addr.ipv4_mapped:
         addr = addr.ipv4_mapped
+    if ((headers or {}).get("cf-worker") or "").strip().lower() == SMITHERY_WORKER \
+            and any(addr in n for n in CLOUDFLARE_RANGES):
+        return "provider:smithery", "smithery"
     if any(addr in n for n in ANTHROPIC_RANGES):
         return "provider:anthropic", "anthropic"
     if any(addr in n for n in _openai_ranges()):
@@ -173,7 +192,7 @@ def _bucket(ip: str) -> tuple[str, str | None]:
 
 async def _keyless(ctx: Context, path: str, params: dict | None) -> dict[str, Any]:
     ip = ((ctx.headers or {}).get("x-forwarded-for") or "").split(",")[0].strip()
-    bucket, provider = _bucket(ip)
+    bucket, provider = _bucket(ip, ctx.headers)
     label = PROVIDER_LABEL.get(provider or "", "")
     monthly, per_minute = (PROVIDER_MONTHLY, PROVIDER_PER_MINUTE) if provider else (KEYLESS_MONTHLY, KEYLESS_PER_MINUTE)
     now = datetime.datetime.now(datetime.timezone.utc)
@@ -188,7 +207,7 @@ async def _keyless(ctx: Context, path: str, params: dict | None) -> dict[str, An
         pipe.incr(minute_key); pipe.expire(minute_key, 120)
         if (await pipe.execute())[0] > per_minute:
             if provider:
-                raise ToolError(f"Keyless lookups from {label} connectors share a limit of {per_minute} a "
+                raise ToolError(f"Keyless lookups through {label} share a limit of {per_minute} a "
                                 "minute. Wait a moment and try again.")
             raise ToolError(f"Keyless use is limited to {per_minute} lookups a minute. Wait a "
                             f"moment, or add a RapidAPI key as X-RapidAPI-Key: {PRICING}")
@@ -198,10 +217,9 @@ async def _keyless(ctx: Context, path: str, params: dict | None) -> dict[str, An
         if used > monthly:
             if provider:
                 raise ToolError(
-                    f"The keyless pool shared by everyone using this server from {label} ({monthly:,} lookups "
-                    "a month) is used up. To keep going, connect from a client that can send a request header "
-                    "(Claude Code, Cursor, VS Code, Windsurf) with a free RapidAPI key as X-RapidAPI-Key "
-                    f"(1,000 requests a month, no card): {PRICING}")
+                    f"The keyless pool shared by everyone using this server through {label} ({monthly:,} "
+                    f"lookups a month) is used up. To keep going, {OWN_KEY_HINT[provider]} (1,000 requests "
+                    f"a month, no card): {PRICING}")
             raise ToolError(
                 f"The {monthly:,} free keyless lookups for this month are used up. Get a free "
                 "RapidAPI key (another 1,000 requests a month, no card) and send it as X-RapidAPI-Key: "
@@ -243,8 +261,8 @@ async def _keyless(ctx: Context, path: str, params: dict | None) -> dict[str, An
         left = max(0, monthly - used)
         if provider:
             data["_keyless"] = (f"{left:,} of {monthly:,} lookups left this month in the keyless pool shared by "
-                                f"all {label} users. Your own free RapidAPI key, sent as X-RapidAPI-Key from a "
-                                f"client such as Claude Code or Cursor, gives you 1,000 a month: {PRICING}")
+                                f"all {label} users. For 1,000 a month of your own, {OWN_KEY_HINT[provider]}: "
+                                f"{PRICING}")
         else:
             data["_keyless"] = (f"{left:,} of {monthly:,} free keyless lookups left this month. "
                                 f"A free RapidAPI key adds 1,000 more: {PRICING}")
