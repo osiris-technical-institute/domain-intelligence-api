@@ -1,0 +1,27 @@
+{
+  "name": "oti-domain-intelligence",
+  "displayName": "OTI Labs Domain Intelligence",
+  "version": "1.0.0",
+  "description": "Look up any domain: WHOIS/RDAP registration, DNS, the live SSL certificate, live subdomains with IPs, and SPF/DKIM/DMARC. Includes skills for phishing triage, email-security audits and domain due diligence.",
+  "author": {
+    "name": "OTI Labs",
+    "url": "https://oti-labs.com"
+  },
+  "homepage": "https://oti-labs.com/mcp-server",
+  "repository": "https://github.com/osiris-technical-institute/domain-intelligence-api",
+  "license": "MIT",
+  "keywords": ["whois", "rdap", "dns", "ssl", "subdomains", "spf", "dkim", "dmarc", "phishing", "security"],
+  "icon": "./icon.png",
+  "documentationUrl": "https://oti-labs.com/mcp-server",
+  "supportUrl": "https://github.com/osiris-technical-institute/domain-intelligence-api/issues",
+  "privacyPolicyUrl": "https://oti-labs.com/privacy",
+  "userConfig": {
+    "rapidapi_key": {
+      "type": "string",
+      "title": "RapidAPI key (optional)",
+      "description": "Leave empty to use the free allowance (1,000 lookups a month, no key). To use your own plan instead, paste a RapidAPI key subscribed to the Domain Intelligence API.",
+      "sensitive": true,
+      "default": ""
+    }
+  }
+}
