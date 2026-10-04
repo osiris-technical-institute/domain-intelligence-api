@@ -72,12 +72,13 @@ OWN_KEY_HINT = {
     "openai": "send a free RapidAPI key as X-RapidAPI-Key from a client that can set headers (Claude Code, Cursor, VS Code, Windsurf)",
     "smithery": "add a free RapidAPI key as X-RapidAPI-Key in this server's connection settings on Smithery",
 }
-VERSION = "1.2.1"
+VERSION = "1.2.2"
 LISTING = ("https://rapidapi.com/osiris-technical-institute-osiris-technical-institute-default"
            "/api/domain-intelligence-api")
 PRICING = LISTING + "/pricing"
 DOMAIN_RE = re.compile(r"^(?=.{1,253}$)(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))+$")
-READ_ONLY = ToolAnnotations(read_only_hint=True, idempotent_hint=True, open_world_hint=True)
+def _read_only(title: str) -> ToolAnnotations:
+    return ToolAnnotations(title=title, read_only_hint=True, idempotent_hint=True, open_world_hint=True)
 
 mcp = MCPServer(
     name="domain-intelligence",
@@ -126,6 +127,8 @@ def _api_key(ctx: Context) -> str:
         auth = (headers.get("authorization") or "").strip()
         if auth.lower().startswith("bearer "):
             key = auth[7:].strip()
+    if key.startswith("${"):   # an unfilled client placeholder such as ${user_config.rapidapi_key}
+        key = ""
     return key
 
 
@@ -339,7 +342,7 @@ def _clamp(limit: int) -> int:
     return max(1, min(int(limit or 100), 2000))
 
 
-@mcp.tool(annotations=READ_ONLY, structured_output=True)
+@mcp.tool(title="Full domain lookup", annotations=_read_only("Full domain lookup"), structured_output=True)
 async def domain_lookup(domain: str, ctx: Context, wait: bool = False, subdomain_limit: int = 50) -> dict[str, Any]:
     """Full report on a domain in one call: WHOIS/RDAP registration, DNS records, live SSL
     certificate, subdomains (live hosts with IPs first) and email authentication (SPF, DMARC, DKIM).
@@ -353,7 +356,7 @@ async def domain_lookup(domain: str, ctx: Context, wait: bool = False, subdomain
     return data
 
 
-@mcp.tool(annotations=READ_ONLY, structured_output=True)
+@mcp.tool(title="WHOIS / RDAP lookup", annotations=_read_only("WHOIS / RDAP lookup"), structured_output=True)
 async def whois_lookup(domain: str, ctx: Context) -> dict[str, Any]:
     """Registration data for a domain: registrar, created, updated and expiry dates, nameservers and
     status. RDAP first (rdap.org, IANA bootstrap, 22 fallback servers), then port-43 WHOIS for 60+
@@ -362,14 +365,14 @@ async def whois_lookup(domain: str, ctx: Context) -> dict[str, Any]:
     return await _fetch(ctx, f"/domain/{d}/whois")
 
 
-@mcp.tool(annotations=READ_ONLY, structured_output=True)
+@mcp.tool(title="DNS records", annotations=_read_only("DNS records"), structured_output=True)
 async def dns_records(domain: str, ctx: Context) -> dict[str, Any]:
     """DNS records for a domain: A, AAAA, MX, TXT, NS, CAA and SOA, resolved in parallel."""
     d = _clean_domain(domain)
     return await _fetch(ctx, f"/domain/{d}/dns")
 
 
-@mcp.tool(annotations=READ_ONLY, structured_output=True)
+@mcp.tool(title="SSL certificate", annotations=_read_only("SSL certificate"), structured_output=True)
 async def ssl_certificate(domain: str, ctx: Context) -> dict[str, Any]:
     """The certificate a domain serves on port 443, from a live TLS handshake: issuer, subject,
     valid_from, valid_to, days_until_expiry, SANs, signature algorithm and serial number."""
@@ -377,7 +380,7 @@ async def ssl_certificate(domain: str, ctx: Context) -> dict[str, Any]:
     return _trim_sans(await _fetch(ctx, f"/domain/{d}/ssl"))
 
 
-@mcp.tool(annotations=READ_ONLY, structured_output=True)
+@mcp.tool(title="Subdomains", annotations=_read_only("Subdomains"), structured_output=True)
 async def subdomains(domain: str, ctx: Context, wait: bool = False, limit: int = 100) -> dict[str, Any]:
     """Subdomains of a domain from certificate transparency logs, passive DNS and DNS brute force.
     `live` lists hosts that resolve now, each with its IP; `subdomains` lists every name found, live
@@ -388,7 +391,7 @@ async def subdomains(domain: str, ctx: Context, wait: bool = False, limit: int =
     return _trim_subdomains(data, _clamp(limit))
 
 
-@mcp.tool(annotations=READ_ONLY, structured_output=True)
+@mcp.tool(title="Email security (SPF, DMARC, DKIM)", annotations=_read_only("Email security (SPF, DMARC, DKIM)"), structured_output=True)
 async def email_security(domain: str, ctx: Context) -> dict[str, Any]:
     """Email authentication for a domain: SPF and DMARC records, and DKIM keys found by probing about
     29 common selectors (Google, Microsoft 365, Mailchimp, SendGrid and others). Custom selectors

@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "domain-intelligence": {
+      "type": "http",
+      "url": "https://oti-labs.com/mcp",
+      "headers": {
+        "X-RapidAPI-Key": "${user_config.rapidapi_key}"
+      }
+    }
+  }
+}
