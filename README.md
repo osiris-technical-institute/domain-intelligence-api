@@ -107,7 +107,7 @@ Registrant contact details are not returned. Some registries (for example .uk an
 - **Sources, run concurrently:** crt.sh and certspotter (certificate transparency logs); hackertarget, rapiddns and VirusTotal v3 (passive DNS; VirusTotal paginated to about 120 results); DNS brute-force with a 773-name wordlist across 8 public resolvers (Cloudflare, Google, Quad9, OpenDNS), resolving A and CNAME. Each HTTP source has a 2.5 s connect timeout so an unreachable host fails fast.
 - **Optional subfinder:** if the [`subfinder`](https://github.com/projectdiscovery/subfinder) binary is installed, it runs as a background source that adds 25+ more passive sources. If it is absent, `sources_used` shows `subfinder: skipped`.
 - **Wildcard detection:** three random labels are resolved first. If the zone answers them, brute-force is skipped so a `*.domain` wildcard can't flood the results; the CT and passive-DNS sources still run.
-- **Fast by default:** the response comes back after a ~3 s soft deadline. Slow sources keep running in the background and write the fuller result into the cache. `?wait=1` waits for every source (up to about 20 s) instead.
+- **Fast by default:** the response comes back after a ~3 s soft deadline. Slow sources keep running in the background and write the fuller result into the cache. `?wait=1` waits for every source instead, up to 22 s; a source still running then is marked `enriching` in `sources_used` and finishes in the background.
 - **Live vs historical:** a background pass resolves every discovered name (wildcard-aware) and adds `live`, a list of `{host, ip}` for names that resolve now (IP or CNAME target), and `live_count`. `subdomains` is ordered live-first. On a domain's first lookup this pass finishes after the response, so `live` appears in the cached result shortly after; until then `sources_used` includes `liveness: enriching`.
 - **Noise filtering:** large shared-infrastructure subtrees (for example `*.ns.cloudflare.com`) are collapsed into `pools` with a few representatives kept. DKIM/DMARC records and invalid hostnames are dropped.
 - **Output:** up to 2,000 names per response; `count` is always the full total. `sources_used` gives each source's status (`N found`, `enriching`, `rate-limited`, `unavailable`, `skipped`). `warnings` appears only when fewer than 20 names were found and some sources failed.
@@ -161,6 +161,7 @@ Needs Redis; the default is `redis://127.0.0.1:6379/0`. Put Caddy or nginx in fr
 | `VT_API_KEY` | Enables the VirusTotal subdomain source (skipped if unset) |
 | `SUBFINDER_BIN` | Path to the subfinder binary (default `/usr/local/bin/subfinder`; skipped if missing) |
 | `SUBDOMAINS_WAIT_DEADLINE` | How long `wait=True` waits for slow subdomain sources (default 20 s) |
+| `SUBDOMAINS_WAIT_CAP` | Total time `?wait=1` waits for sources before returning what has finished (default 22 s, under the 25 s request timeout) |
 | `SUBDOMAINS_LIVENESS_BUDGET`, `SUBDOMAINS_LIVE_CAP` | Max names resolved in the liveness pass (5,000) and max live hosts returned (2,000) |
 
 ## Repo layout
