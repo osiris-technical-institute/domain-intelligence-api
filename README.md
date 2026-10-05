@@ -114,7 +114,7 @@ Registrant contact details are not returned. Some registries (for example .uk an
 
 No tool finds every subdomain; hosts that never appear in public data can't be discovered passively.
 
-**Email security.** SPF from the domain's TXT records, DMARC from `_dmarc.{domain}`, and DKIM by probing 29 selectors used by Google Workspace, Microsoft 365, Mailchimp, SendGrid, Postmark, Mandrill, Klaviyo, Mailgun and generic names. Records are returned raw; SPF and DMARC are not parsed. Custom or hash-based DKIM selectors (for example Amazon SES) can't be discovered this way. BIMI, MTA-STS and blocklist checks are not included.
+**Email security.** SPF from the domain's TXT records, DMARC from `_dmarc.{domain}`, and DKIM by probing 29 selectors used by Google Workspace, Microsoft 365, Mailchimp, SendGrid, Postmark, Mandrill, Klaviyo, Mailgun and generic names. A selector counts as found only if its record has a public key: an empty `p=` (a revoked key) and answers from a `*._domainkey` wildcard are not counted, and the `note` says when either occurs. Records are returned raw; SPF and DMARC are not parsed. Custom or hash-based DKIM selectors (for example Amazon SES) can't be discovered this way. BIMI, MTA-STS and blocklist checks are not included.
 
 **Timeouts.** Each section has an overall limit: DNS 5 s, WHOIS 8 s, SSL 8 s, subdomains 10 s, email 6 s. A section that times out returns `{"error": "timeout", ...}`.
 
