@@ -97,6 +97,9 @@ SOFT_DEADLINE = 3.0
 # instead of the fast snapshot. Anything still pending after this still enriches in
 # the background. Opt-in only — the default path stays fast.
 WAIT_DEADLINE = float(os.environ.get("SUBDOMAINS_WAIT_DEADLINE", "20.0"))
+# Total time ?wait=1 spends waiting for sources. Kept under the API's 25 s hard timeout so a slow
+# source (subfinder can run up to a minute) is left to finish in the background instead.
+WAIT_CAP = float(os.environ.get("SUBDOMAINS_WAIT_CAP", "22.0"))
 
 # Warnings only appear when coverage is below this count
 LOW_COVERAGE_THRESHOLD = 20
@@ -835,6 +838,7 @@ async def get_subdomains(domain: str, limit: int = 2000, wait: bool = False, wai
     when the response is otherwise solid.
     """
     domain = domain.strip().lower().rstrip(".")
+    started = asyncio.get_running_loop().time()
     if wait_liveness:
         wait = True   # liveness-inline (used by the monitoring cron) implies waiting for sources first
     found: set = set()
@@ -883,26 +887,30 @@ async def get_subdomains(domain: str, limit: int = 2000, wait: bool = False, wai
     pending_names = [task_to_name[t] for t in pending]
 
     if wait:
-        # Opt-in complete mode: gather any remaining sources inline for full coverage now.
+        # Opt-in complete mode: gather the remaining sources inline. The monitoring cron
+        # (wait_liveness) waits for all of them; ?wait=1 stops at WAIT_CAP and leaves any
+        # source still running to finish in the background, like the fast mode.
         if pending:
-            await asyncio.wait(pending)
-            for t in list(pending):
+            cap = None if wait_liveness else max(0.0, WAIT_CAP - (asyncio.get_running_loop().time() - started))
+            more, pending = await asyncio.wait(pending, timeout=cap)
+            for t in more:
                 nm = task_to_name.get(t, "?")
                 try:
                     results_by_name[nm] = t.result()
                 except Exception as exc:
                     results_by_name[nm] = exc
-            pending = set()
         if wait_liveness:
             # Fully synchronous (monitoring cron): run the liveness pass inline and
             # return the complete tiered result — no background task.
             live_map = await _compute_liveness(domain, found)
             await client.aclose()
             return _assemble(domain, found, results_by_name, [], limit, live_map=live_map)
-        # Default ?wait=1: sources complete now; liveness tiers fill in the background.
-        result = _assemble(domain, found, results_by_name, [], limit, liveness_pending=True)
+        # Default ?wait=1: sources are complete (unless one passed WAIT_CAP, which is then
+        # marked as enriching); liveness tiers fill in the background.
+        result = _assemble(domain, found, results_by_name, [task_to_name[t] for t in pending], limit,
+                           liveness_pending=True)
         asyncio.ensure_future(
-            _enrich_in_background(domain, found, results_by_name, task_to_name, set(), limit, client)
+            _enrich_in_background(domain, found, results_by_name, task_to_name, pending, limit, client)
         )
         return result
 
